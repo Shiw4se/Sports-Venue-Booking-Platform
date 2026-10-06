@@ -75,7 +75,7 @@ jobs:
           mkdir -p logs
           for s in user-service venue-service booking-service notification-service payment-service api-gateway; do
             # short reminder interval so the e2e reminder check does not wait 5 minutes
-            (cd backend/$s && REMINDER_INTERVAL_MS=2000 REMINDER_START_DELAY_MS=3000 PAYMENT_SWEEP_INTERVAL_MS=2000 nohup node app.js > ../../logs/$s.log 2>&1 & echo $! > ../../logs/$s.pid)
+            (cd backend/$s || exit 1; REMINDER_INTERVAL_MS=2000 REMINDER_START_DELAY_MS=3000 PAYMENT_SWEEP_INTERVAL_MS=2000 nohup node app.js > ../../logs/$s.log 2>&1 & echo $! > ../../logs/$s.pid)
           done
           for i in $(seq 1 30); do
             curl -fs http://localhost:3000/api/health && exit 0
