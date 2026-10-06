@@ -75,7 +75,7 @@ jobs:
           mkdir -p logs
           for s in user-service venue-service booking-service notification-service payment-service api-gateway; do
             # short reminder interval so the e2e reminder check does not wait 5 minutes
-            (cd backend/$s && REMINDER_INTERVAL_MS=2000 REMINDER_START_DELAY_MS=3000 PAYMENT_SWEEP_INTERVAL_MS=2000 nohup node app.js > ../../logs/$s.log 2>&1 &)
+            (cd backend/$s && REMINDER_INTERVAL_MS=2000 REMINDER_START_DELAY_MS=3000 PAYMENT_SWEEP_INTERVAL_MS=2000 nohup node app.js > ../../logs/$s.log 2>&1 & echo $! > ../../logs/$s.pid)
           done
           for i in $(seq 1 30); do
             curl -fs http://localhost:3000/api/health && exit 0
@@ -101,11 +101,13 @@ jobs:
 
       - name: Restart payment-service in Stripe mode
         run: |
-          pkill -f "payment-service" || true
-          sleep 2
+          # every service runs as "node app.js", so stop this one by its PID; a leftover instance in
+          # disabled mode would share the RPC queue and answer half of the requests
+          kill "$(cat logs/payment-service.pid)"
+          while kill -0 "$(cat logs/payment-service.pid)" 2>/dev/null; do sleep 1; done
           (cd backend/payment-service && STRIPE_SECRET_KEY=sk_test_123 STRIPE_WEBHOOK_SECRET=whsec_test STRIPE_API_BASE=http://localhost:12111 nohup node app.js > ../../logs/payment-service-stripe.log 2>&1 &)
           for i in $(seq 1 30); do
-            curl -fs http://localhost:3000/api/health | grep -q '"payment":"up"' && exit 0
+            grep -q "Stripe enabled" logs/payment-service-stripe.log && curl -fs http://localhost:3000/api/health | grep -q '"payment":"up"' && exit 0
             sleep 2
           done
           echo "payment-service did not come back" && exit 1
