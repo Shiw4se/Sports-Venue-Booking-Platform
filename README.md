@@ -26,6 +26,8 @@ and reminders, and rate the games they played; admins manage venues, galleries a
 
 ![Awaiting payment](docs/screenshots/awaiting-payment.png)
 
+More screenshots (desktop, mobile, dark mode, architecture) are in [docs/portfolio](docs/portfolio).
+
 ## Features
 
 **For players**

@@ -3,7 +3,7 @@
   "info": {
     "title": "SportBook API",
     "version": "4.0.0",
-    "description": "REST API of the SportBook venue booking platform. The API Gateway forwards requests to the User, Venue and Booking microservices over RabbitMQ RPC.\n\n**Auth:** call `POST /user/login`, then click **Authorize** and paste the token.\n\n**Payments:** when `STRIPE_SECRET_KEY` is configured, paid slots are booked as `pending_payment` and `POST /bookings/create` returns a `checkout_url` (Stripe Checkout). The slot is held for 30 minutes; the booking becomes `booked` once Stripe confirms the payment (webhook or `GET /payments/verify` on return). Cancelling a paid booking refunds it in full."
+    "description": "REST API of the SportBook venue booking platform. The API Gateway forwards requests over RabbitMQ RPC to the User, Venue, Booking, Notification and Payment microservices.\n\n**Auth:** call `POST /user/login`, then click **Authorize** and paste the token.\n\n**Payments:** when `STRIPE_SECRET_KEY` is configured, paid slots are booked as `pending_payment` and `POST /bookings/create` returns a `checkout_url` (Stripe Checkout). The slot is held for 30 minutes; the booking becomes `booked` once Stripe confirms the payment (webhook or `GET /payments/verify` on return). Cancelling a paid booking refunds it in full."
   },
   "servers": [
     {
