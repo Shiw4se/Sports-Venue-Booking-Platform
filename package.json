@@ -9,7 +9,8 @@
     "mq:local": "node backend/mq/local-rabbitmq.mjs",
     "seed": "node backend/db/seed.js",
     "test:e2e": "node backend/tests/e2e.test.js",
-    "test:payments": "node backend/tests/payments.mock.test.js"
+    "test:payments": "node backend/tests/payments.mock.test.js",
+    "stripe:pay": "node backend/scripts/simulate-payment.js"
   },
   "private": true,
   "devDependencies": {

@@ -185,6 +185,9 @@ Run it (`stripe-mock -http-port 12111`), start payment-service with
 exercises the whole pipeline: Checkout Session, held slot, locally signed webhooks (signature verification is the real thing),
 duplicate events, refund on cancel, hold expiry, a payment that lands after expiry (auto-refund), "Pay now", admin and free slots.
 CI does exactly this. The same variables make `npm run test:e2e` run its Stripe branch too.
+To click through the flow in the browser with stripe-mock, book a paid slot (the Checkout link will not open — the emulator
+hosts no payment page), go back to your profile and run `npm run stripe:pay` — it sends a signed `checkout.session.completed`
+webhook for the most recent pending booking, just like Stripe would, and the booking turns Active.
 
 **Real Stripe (test mode).** Needs an account in a [country Stripe supports](https://stripe.com/global). To see a real payment, install the Stripe CLI (`npm install -g @stripe/cli`), run
 `stripe listen --forward-to localhost:3000/api/payments/webhook`, put the printed `whsec_…` into `STRIPE_WEBHOOK_SECRET`,
