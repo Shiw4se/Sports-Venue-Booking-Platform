@@ -9,6 +9,7 @@ const userRoutes = require('./routes/user.routes');
 const slotRoutes = require('./routes/slots.routes');
 const bookingRoutes = require('./routes/booking.routes');
 const adminRoutes = require('./routes/admin.routes');
+const { router: paymentRoutes, stripeWebhook } = require('./routes/payments.routes');
 const openapi = require('./docs/openapi.json');
 
 dotenv.config();
@@ -23,6 +24,8 @@ const app = express();
 // Security headers. CSP is off because the React build uses an inline runtime chunk
 // and loads Google Fonts; enable and tune it for production deployments.
 app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
+// Stripe signs the raw request body, so this route must see it before any JSON parser
+app.post('/api/payments/webhook', express.raw({ type: 'application/json', limit: '1mb' }), stripeWebhook);
 // Avatar uploads carry a base64 image (≤300 KB of bytes); everything else stays small
 app.use('/api/user/avatar', express.json({ limit: '600kb' }));
 // Venue gallery photos (≤900 KB of bytes)
@@ -45,6 +48,7 @@ const SERVICES = {
     venue: process.env.VENUE_RPC_QUEUE,
     booking: process.env.BOOKING_RPC_QUEUE,
     notification: process.env.NOTIFICATION_RPC_QUEUE || 'notification_rpc_queue',
+    payment: process.env.PAYMENT_RPC_QUEUE || 'payment_rpc_queue',
 };
 app.get('/api/health', async (req, res) => {
     const results = await Promise.all(Object.entries(SERVICES).map(async ([name, queue]) => {
@@ -71,6 +75,7 @@ app.get('/api/openapi.json', (req, res) => res.json(openapi));
 app.use('/api/user', userRoutes);
 app.use('/api/venue', slotRoutes);
 app.use('/api/bookings', authenticateUser, bookingRoutes);
+app.use('/api/payments', authenticateUser, paymentRoutes);
 app.use('/api/admin', authenticateAdmin, adminRoutes);
 
 // 404 for unknown API routes

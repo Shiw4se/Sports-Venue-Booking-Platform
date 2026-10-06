@@ -2,11 +2,12 @@ require('dotenv').config();
 const amqp = require('amqplib');
 const { connectWithRetry } = require('../../shared/amqp');
 const { assertRpcQueue, serveRpc, createRpcClient } = require('../../shared/rpc');
-const { createEventPublisher } = require('../../shared/events');
+const { createEventPublisher, subscribeEvents } = require('../../shared/events');
 const bookings = require('../controllers/booking.controller');
 const reviews = require('../controllers/review.controller');
 
 const REMINDER_INTERVAL_MS = Number(process.env.REMINDER_INTERVAL_MS) || 5 * 60 * 1000;
+const PAYMENT_SWEEP_INTERVAL_MS = Number(process.env.PAYMENT_SWEEP_INTERVAL_MS) || 60 * 1000;
 
 async function start() {
     const connection = await connectWithRetry(amqp, process.env.RABBITMQ_URL);
@@ -15,6 +16,7 @@ async function start() {
     const clientChannel = await connection.createChannel();
     await assertRpcQueue(clientChannel, process.env.VENUE_RPC_QUEUE);
     await assertRpcQueue(clientChannel, process.env.USER_RPC_QUEUE || 'user_rpc_queue');
+    await assertRpcQueue(clientChannel, process.env.PAYMENT_RPC_QUEUE || 'payment_rpc_queue');
     const rpc = await createRpcClient(clientChannel);
     bookings.setVenueRpc(rpc);
 
@@ -22,12 +24,17 @@ async function start() {
     const publish = await createEventPublisher(eventsChannel);
     bookings.setEventPublisher(publish);
     reviews.setReviewDeps({ userRpc: rpc, publish });
+    await subscribeEvents(eventsChannel, process.env.EVENTS_QUEUE || 'booking_events', {
+        'payment.refunded': bookings.onPaymentRefunded,
+    });
 
     const serverChannel = await connection.createChannel();
     await serveRpc(serverChannel, process.env.RPC_QUEUE, {
         create: bookings.createBooking,
         get: bookings.getBookingsByUser,
         cancel: bookings.cancelBooking,
+        pay: bookings.payBooking,
+        mark_paid: bookings.markPaid,
         stats: bookings.getStats,
         upsert_review: reviews.upsertReview,
         venue_reviews: reviews.getVenueReviews,
@@ -40,9 +47,15 @@ async function start() {
     // The first run waits a little: on a fresh broker the notification queue may not exist yet,
     // and events published to an exchange with no bound queue are dropped. Once created, the
     // queue is durable and keeps events even while notification-service is down.
+    // Unpaid holds that ran out
+    const runSweep = () => bookings.expirePendingBookings()
+        .then(n => n && console.log(`Released ${n} unpaid booking(s)`))
+        .catch(err => console.error('Hold sweep failed:', err));
     setTimeout(() => {
         runReminders();
+        runSweep();
         setInterval(runReminders, REMINDER_INTERVAL_MS);
+        setInterval(runSweep, PAYMENT_SWEEP_INTERVAL_MS);
     }, Number(process.env.REMINDER_START_DELAY_MS ?? 30000));
 }
 

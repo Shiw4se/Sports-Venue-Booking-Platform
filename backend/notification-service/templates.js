@@ -105,13 +105,41 @@ const templates = {
 
     booking_cancelled: ({ user, venue, booking }) => {
         const heading = 'Your booking was cancelled';
-        const introText = `Hi ${user.name}, this booking has been cancelled and the slot is free again.`;
+        const refund = booking.refund;
+        const introText = `Hi ${user.name}, this booking has been cancelled and the slot is free again.`
+            + (refund ? ` A refund of ${money(refund.amount)} is on its way to your card — it usually shows up within 5–10 business days.` : '');
         const details = bookingDetails({ venue, booking });
+        if (refund) details.push(['Refund', money(refund.amount)]);
         const button = { label: 'Book another time', url: APP_URL() };
         return {
             subject: `Booking cancelled: ${venue.name}`,
             html: layout({ preheader: introText, heading, intro: escapeHtml(introText), details, button }),
             text: plain({ heading, introText, details, button }),
+        };
+    },
+
+    booking_expired: ({ user, venue, booking }) => {
+        const heading = 'Your reservation expired';
+        const introText = `Hi ${user.name}, we held this slot for you while you paid, but the payment didn't go through in time. The slot is free again — you can book it once more if it's still available.`;
+        const details = bookingDetails({ venue, booking });
+        const button = { label: 'Book again', url: APP_URL() };
+        return {
+            subject: `Reservation expired: ${venue.name}`,
+            html: layout({ preheader: introText, heading, intro: escapeHtml(introText), details, button }),
+            text: plain({ heading, introText, details, button }),
+        };
+    },
+
+    payment_refunded: ({ user, amount, reason }) => {
+        const heading = "You've been refunded";
+        const introText = reason === 'late_payment'
+            ? `Hi ${user.name}, your payment of ${money(amount)} arrived after the reservation had expired and the slot had been released, so we refunded it in full. It usually shows up within 5–10 business days.`
+            : `Hi ${user.name}, ${money(amount)} has been refunded to your card. It usually shows up within 5–10 business days.`;
+        const button = { label: 'Book a new time', url: APP_URL() };
+        return {
+            subject: `Refund of ${money(amount)} issued`,
+            html: layout({ preheader: introText, heading, intro: escapeHtml(introText), button }),
+            text: plain({ heading, introText, button }),
         };
     },
 

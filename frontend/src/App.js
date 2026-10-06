@@ -17,16 +17,31 @@ const NAV = [
     { id: 'emails', label: 'Emails', adminOnly: true },
 ];
 
-// Links in emails: ?view=profile opens the profile, ?reset=<token> opens "choose a new password".
+// Links in emails and Stripe redirects: ?view=profile opens the profile, ?reset=<token> opens
+// "choose a new password", ?checkout=success&session_id=… / ?checkout=cancelled come back from Stripe.
 // Read once on load, then removed from the address bar.
 function readLinkParams() {
     const params = new URLSearchParams(window.location.search);
-    const link = { view: params.get('view') === 'profile' ? 'profile' : 'venues', resetToken: params.get('reset') };
-    if (params.has('view') || params.has('reset')) {
+    const checkout = ['success', 'cancelled'].includes(params.get('checkout')) ? params.get('checkout') : null;
+    const link = {
+        view: params.get('view') === 'profile' || checkout ? 'profile' : 'venues',
+        resetToken: params.get('reset'),
+        checkout,
+        sessionId: params.get('session_id'),
+    };
+    if (params.has('view') || params.has('reset') || params.has('checkout')) {
         window.history.replaceState(null, '', window.location.pathname);
     }
     return link;
 }
+
+// What to tell the player after Stripe sent them back
+const CHECKOUT_MESSAGES = {
+    paid: ['Payment received — your booking is confirmed', 'success'],
+    pending: ['Payment is being processed; the booking will be confirmed shortly', 'info'],
+    expired: ['The reservation expired before the payment completed', 'error'],
+    refunded: ['The reservation had expired, so the payment was refunded in full', 'error'],
+};
 
 function AppShell() {
     const toast = useToast();
@@ -43,6 +58,7 @@ function AppShell() {
     const [favorites, setFavorites] = useState(() => new Set());
     const [rebookVenueId, setRebookVenueId] = useState(null);
     const [openVenueRequest, setOpenVenueRequest] = useState(null);
+    const [profileRefresh, setProfileRefresh] = useState(0); // bumps after a payment check so bookings reload
 
     const handleLogin = (newToken) => {
         saveToken(newToken);
@@ -95,6 +111,30 @@ function AppShell() {
                 apiFetch('/api/user/favorites', { auth: true }).then(ids => setFavorites(new Set(ids))).catch(() => {});
             });
     }, [favorites, isUserLoggedIn, toast]);
+
+    // Back from Stripe Checkout: confirm the booking right away instead of waiting for the webhook
+    useEffect(() => {
+        if (!link.checkout) return;
+        if (!isUserLoggedIn) {
+            toast('Log in to see your booking');
+            setAuthMode('login');
+            return;
+        }
+        if (link.checkout === 'cancelled') {
+            toast('Payment cancelled — the slot is held for 30 minutes, you can pay from your profile');
+            return;
+        }
+        if (!link.sessionId) return;
+        apiFetch(`/api/payments/verify?session_id=${encodeURIComponent(link.sessionId)}`, { auth: true })
+            .then(({ paymentStatus }) => {
+                const [message, type] = CHECKOUT_MESSAGES[paymentStatus] || CHECKOUT_MESSAGES.pending;
+                toast(message, type);
+            })
+            .catch(err => toast(err.message, 'error'))
+            .finally(() => setProfileRefresh(n => n + 1));
+        // runs once per page load for the link that opened it
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isUserLoggedIn]);
 
     // "Book again" from the profile opens the booking dialog of that venue
     const handleBookAgain = (venueId) => {
@@ -189,6 +229,7 @@ function AppShell() {
                             onProfileUpdated={setProfile}
                             favorites={favorites}
                             onToggleFavorite={toggleFavorite}
+                            refreshKey={profileRefresh}
                         />
                     ) : (
                         <div className={styles.locked}>

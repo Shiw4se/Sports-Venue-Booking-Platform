@@ -7,8 +7,8 @@
 ![RabbitMQ](https://img.shields.io/badge/RabbitMQ-4-FF6600?logo=rabbitmq&logoColor=white)
 
 A full-stack, event-driven microservice platform for booking football fields, tennis and basketball courts.
-Players browse venues with photos and reviews, book a time slot, get email confirmations and reminders,
-and rate the games they played; admins manage venues, galleries and recurring schedules and track revenue on a dashboard.
+Players browse venues with photos and reviews, book a time slot, pay with Stripe Checkout, get email confirmations
+and reminders, and rate the games they played; admins manage venues, galleries and recurring schedules and track revenue on a dashboard.
 
 ![Venues](docs/screenshots/venues.png)
 
@@ -24,6 +24,10 @@ and rate the games they played; admins manage venues, galleries and recurring sc
 |---|---|
 | ![Emails](docs/screenshots/mailbox.png) | ![Slot schedule](docs/screenshots/slot-schedule.png) |
 
+![Awaiting payment](docs/screenshots/awaiting-payment.png)
+
+More screenshots (desktop, mobile, dark mode, architecture) are in [docs/portfolio](docs/portfolio).
+
 ## Features
 
 **For players**
@@ -35,6 +39,8 @@ and rate the games they played; admins manage venues, galleries and recurring sc
 - Emails: welcome, booking confirmation, cancellation, a reminder the day before the game, password reset
 - "Forgot password?" flow with a one-time, 1-hour reset link
 - Pick a time slot grouped by day and see the total price before booking
+- Pay online with Stripe Checkout: the slot is held for 30 minutes while you pay, unpaid holds are released
+  automatically, "Pay now" from the profile, full refund when a paid booking is cancelled
 - Profile with the next game (countdown, add to calendar, directions), stats, a 12-week activity heatmap and achievements
 - Bookings with upcoming / history tabs, one-click cancellation and "Book again"
 - Edit name, password and avatar: upload a photo (cropped and resized to 256×256 WebP in the browser) or pick a color
@@ -53,8 +59,12 @@ and rate the games they played; admins manage venues, galleries and recurring sc
   of two concurrent requests exactly one wins, the other gets `409`. A partial unique index backs it up in the database.
 - **Saga-style compensation** — if creating the booking fails after the slot was reserved, the slot is released.
 - **Price snapshot** — the booking stores the price at booking time, so later price changes don't rewrite history.
-- **Event-driven notifications** — services publish domain events (`booking.created`, `booking.cancelled`, `booking.reminder`,
-  `user.registered`, `user.password_reset_requested`, `venue.rating_changed`) to a durable RabbitMQ topic exchange;
+- **Payments done safely** — a dedicated payment service owns the Stripe keys. A booking is confirmed exactly once whether the
+  webhook or the player's return to the site arrives first (idempotent `mark_paid`, webhook events deduplicated by id).
+  A payment that lands after the hold expired is refunded automatically; cancelling a paid booking refunds first and
+  cancels only if the refund succeeded. Without `STRIPE_SECRET_KEY` bookings are confirmed instantly (useful in CI).
+- **Event-driven notifications** — services publish domain events (`booking.created`, `booking.cancelled`, `booking.expired`,
+  `booking.reminder`, `payment.refunded`, `user.registered`, `user.password_reset_requested`, `venue.rating_changed`) to a durable RabbitMQ topic exchange;
   the notification service and the venue service react to them without the publishers knowing about them.
 - **Pluggable email delivery** — SMTP (Resend, SendGrid, Mailtrap, …) via `SMTP_URL`; without it emails are kept in a dev mailbox.
 - **Safe password reset** — only a SHA-256 hash of the emailed token is stored; the token expires in an hour and works once;
@@ -78,10 +88,14 @@ flowchart LR
     MQ <--> VS["Venue service<br/>venues, slots, photos,<br/>atomic reservation"]
     MQ <--> BS["Booking service<br/>bookings, pricing, reviews,<br/>stats, reminder scheduler"]
     MQ --> NS["Notification service<br/>email templates,<br/>SMTP / dev mailbox"]
+    MQ <--> PS["Payment service<br/>Stripe Checkout,<br/>webhooks, refunds"]
+    PS <--> Stripe[("Stripe")]
+    Stripe -.->|webhook| GW
     US --> DB[("PostgreSQL")]
     VS --> DB
     BS --> DB
     NS --> DB
+    PS --> DB
 ```
 
 Services talk to each other only through RabbitMQ:
@@ -91,6 +105,9 @@ Services talk to each other only through RabbitMQ:
 - **Events** (durable topic exchange `sportbook.events`) for things others may react to — e.g. booking-service publishes
   `booking.created`; notification-service looks up the player and venue and sends the confirmation email.
   A new review publishes `venue.rating_changed`, which venue-service uses to keep the rating shown on cards.
+
+Booking a paid slot: `gateway → booking-service (reserve slot, booking `pending_payment`) → payment-service (Stripe Checkout Session)
+→ player pays on Stripe → webhook or `GET /api/payments/verify` → payment-service → booking-service `mark_paid` → `booked``.
 
 ## Tech stack
 
@@ -159,9 +176,24 @@ To make any registered user an admin: `UPDATE users SET role = 'admin' WHERE ema
 
 ```bash
 npm run test:e2e                         # against the running stack (default http://localhost:3000/api)
+npm run test:payments                    # payment pipeline against stripe-mock (see below)
 E2E_API_URL=http://host:port/api npm run test:e2e
-cd frontend && npm test                  # frontend unit test
+cd frontend && npm test                  # frontend unit tests
 ```
+
+**Payments without a Stripe account.** [stripe-mock](https://github.com/stripe/stripe-mock) is Stripe's official API emulator.
+Run it (`stripe-mock -http-port 12111`), start payment-service with
+`STRIPE_SECRET_KEY=sk_test_123 STRIPE_WEBHOOK_SECRET=whsec_test STRIPE_API_BASE=http://localhost:12111`, and `npm run test:payments`
+exercises the whole pipeline: Checkout Session, held slot, locally signed webhooks (signature verification is the real thing),
+duplicate events, refund on cancel, hold expiry, a payment that lands after expiry (auto-refund), "Pay now", admin and free slots.
+CI does exactly this. The same variables make `npm run test:e2e` run its Stripe branch too.
+To click through the flow in the browser with stripe-mock, book a paid slot (the Checkout link will not open — the emulator
+hosts no payment page), go back to your profile and run `npm run stripe:pay` — it sends a signed `checkout.session.completed`
+webhook for the most recent pending booking, just like Stripe would, and the booking turns Active.
+
+**Real Stripe (test mode).** Needs an account in a [country Stripe supports](https://stripe.com/global). To see a real payment, install the Stripe CLI (`npm install -g @stripe/cli`), run
+`stripe listen --forward-to localhost:3000/api/payments/webhook`, put the printed `whsec_…` into `STRIPE_WEBHOOK_SECRET`,
+restart the payment service and pay with the test card `4242 4242 4242 4242`.
 
 The end-to-end suite covers registration and login, role checks, venue and slot validation,
 concurrent booking of the same slot, pricing, ownership checks, cancellation, admin stats,
@@ -192,7 +224,10 @@ Full interactive reference: **`/api/docs`** (OpenAPI 3 spec at `/api/openapi.jso
 | DELETE | `/api/venue/delete/:id` 👑 | Delete a venue |
 | POST | `/api/venue/createslot/:venueId` 👑 | Create a slot (`start_time`, `end_time`) |
 | DELETE | `/api/venue/deleteslot/:id` 👑 | Delete a slot |
-| POST | `/api/bookings/create` 🔒 | Book a slot (`slot_id`) |
+| POST | `/api/bookings/create` 🔒 | Book a slot (`slot_id`); returns `checkout_url` when payment is required |
+| POST | `/api/bookings/:bookingId/pay` 🔒 | New Checkout Session for a booking awaiting payment |
+| GET | `/api/payments/verify?session_id=` 🔒 | Confirm a Checkout Session after returning from Stripe |
+| POST | `/api/payments/webhook` | Stripe webhook (signature-verified) |
 | GET | `/api/bookings/:userId` 🔒 | Own bookings |
 | DELETE | `/api/bookings/:bookingId` 🔒 | Cancel an own booking |
 | GET | `/api/admin/stats` 👑 | Dashboard statistics |
@@ -217,6 +252,7 @@ backend/
   venue-service/    venues and slots, atomic slot reservation
   booking-service/  bookings, pricing, reviews, admin statistics, day-before reminder scheduler
   notification-service/ email templates; sends via SMTP or keeps emails in the dev mailbox
+  payment-service/  Stripe Checkout sessions, webhook handling, refunds
   shared/           RPC client/server and RabbitMQ connection helpers
   db/               schema (init.sql), demo seed, portable PostgreSQL launcher
   mq/               portable RabbitMQ launcher (Windows)
@@ -243,10 +279,15 @@ docs/screenshots/   images used in this README
 | `APP_URL` | notification | `http://localhost:3010` | Base URL for links in emails |
 | `APP_TIMEZONE` | notification | `Europe/Kyiv` | Time zone of dates in emails |
 | `REMINDER_INTERVAL_MS` | booking | `300000` | How often to look for games starting within 24 hours |
+| `PAYMENT_HOLD_MINUTES` | booking, payment | `30` | How long a slot is held while the player pays (Stripe minimum) |
+| `PAYMENT_SWEEP_INTERVAL_MS` | booking | `60000` | How often expired holds are released |
+| `STRIPE_SECRET_KEY` | payment | empty | `sk_test_…` / `sk_live_…`; empty = payments disabled |
+| `STRIPE_WEBHOOK_SECRET` | payment | empty | `whsec_…` from the Stripe CLI or Dashboard |
+| `STRIPE_CURRENCY` | payment | `usd` | Checkout currency |
+| `APP_URL` | payment | `http://localhost:3010` | Where Stripe sends the player back |
 
 ## Roadmap
 
-- Online payments (Stripe)
 - E-mail verification on sign-up
 - Containerised services and one-command cloud deployment
 

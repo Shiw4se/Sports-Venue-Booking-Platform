@@ -2,13 +2,15 @@
   "name": "web",
   "version": "1.0.0",
   "scripts": {
-    "install:all": "npm install --prefix backend/api-gateway && npm install --prefix backend/user-service && npm install --prefix backend/venue-service && npm install --prefix backend/booking-service && npm install --prefix backend/notification-service && npm install --prefix frontend",
-    "start": "concurrently \"npm start --prefix backend/api-gateway\" \"npm start --prefix backend/user-service\" \"npm start --prefix backend/venue-service\" \"npm start --prefix backend/booking-service\" \"npm start --prefix backend/notification-service\" \"npm start --prefix frontend\"",
+    "install:all": "npm install --prefix backend/api-gateway && npm install --prefix backend/user-service && npm install --prefix backend/venue-service && npm install --prefix backend/booking-service && npm install --prefix backend/notification-service && npm install --prefix backend/payment-service && npm install --prefix frontend",
+    "start": "concurrently \"npm start --prefix backend/api-gateway\" \"npm start --prefix backend/user-service\" \"npm start --prefix backend/venue-service\" \"npm start --prefix backend/booking-service\" \"npm start --prefix backend/notification-service\" \"npm start --prefix backend/payment-service\" \"npm start --prefix frontend\"",
     "infra:up": "docker compose up -d",
     "db:local": "node backend/db/local-postgres.mjs",
     "mq:local": "node backend/mq/local-rabbitmq.mjs",
     "seed": "node backend/db/seed.js",
-    "test:e2e": "node backend/tests/e2e.test.js"
+    "test:e2e": "node backend/tests/e2e.test.js",
+    "test:payments": "node backend/tests/payments.mock.test.js",
+    "stripe:pay": "node backend/scripts/simulate-payment.js"
   },
   "private": true,
   "devDependencies": {

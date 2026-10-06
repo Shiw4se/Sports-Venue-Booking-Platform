@@ -58,7 +58,7 @@
 
 .statsRow {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 16px;
 }
 
@@ -276,7 +276,7 @@
     }
 
     .statsRow {
-        grid-template-columns: repeat(2, 1fr);
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .booking {
@@ -314,4 +314,11 @@
 .bookingReview span {
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.bookingHold {
+    margin-top: 4px;
+    color: var(--warning);
+    font-size: 13px;
+    font-weight: 600;
 }

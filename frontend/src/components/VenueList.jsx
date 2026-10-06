@@ -159,8 +159,16 @@ const BookingModal = ({ venue, initialSlotId, onClose, onBooked }) => {
 
     const handleConfirm = () => {
         setSubmitting(true);
+        let redirecting = false;
         apiFetch('/api/bookings/create', { method: 'POST', auth: true, body: { slot_id: selectedSlot.id } })
-            .then(() => {
+            .then((booking) => {
+                if (booking?.checkout_url) {
+                    // Paid slot: the booking is held for 30 minutes while the player pays on Stripe
+                    redirecting = true;
+                    toast('Redirecting to payment…');
+                    window.location.assign(booking.checkout_url);
+                    return;
+                }
                 toast('Booking confirmed!', 'success');
                 onBooked();
             })
@@ -170,7 +178,7 @@ const BookingModal = ({ venue, initialSlotId, onClose, onBooked }) => {
                 setSelectedSlot(null);
                 loadSlots();
             })
-            .finally(() => setSubmitting(false));
+            .finally(() => { if (!redirecting) setSubmitting(false); });
     };
 
     return (

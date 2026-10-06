@@ -1,0 +1,14 @@
+{
+  "name": "payment-service",
+  "private": true,
+  "scripts": {
+    "start": "node app.js"
+  },
+  "dependencies": {
+    "amqplib": "^0.10.9",
+    "dotenv": "^16.6.1",
+    "pg": "^8.23.1",
+    "sequelize": "^6.37.8",
+    "stripe": "^23.0.0"
+  }
+}

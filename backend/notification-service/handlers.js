@@ -40,6 +40,13 @@ const eventHandlers = {
     'booking.created': (booking) => sendBookingEmail('booking_confirmed', booking),
     'booking.cancelled': (booking) => sendBookingEmail('booking_cancelled', booking),
     'booking.reminder': (booking) => sendBookingEmail('booking_reminder', booking),
+    'booking.expired': (booking) => sendBookingEmail('booking_expired', booking),
+
+    // Refund made outside the normal cancel flow (payment landed after the hold expired, or Stripe Dashboard)
+    'payment.refunded': async ({ userId, amount, reason }) => {
+        const user = await lookupUser(userId);
+        await deliver({ to: user.email, type: 'payment_refunded', ...templates.payment_refunded({ user, amount, reason }) });
+    },
 };
 
 // ---------- Mailbox for admins (RPC) ----------

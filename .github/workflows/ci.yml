@@ -57,7 +57,7 @@ jobs:
 
       - name: Install backend dependencies
         run: |
-          for s in api-gateway user-service venue-service booking-service notification-service; do
+          for s in api-gateway user-service venue-service booking-service notification-service payment-service; do
             npm ci --prefix backend/$s
           done
 
@@ -66,16 +66,16 @@ jobs:
 
       - name: Configure services
         run: |
-          for s in api-gateway user-service venue-service booking-service notification-service; do
+          for s in api-gateway user-service venue-service booking-service notification-service payment-service; do
             cp backend/$s/.env.example backend/$s/.env
           done
 
       - name: Start services
         run: |
           mkdir -p logs
-          for s in user-service venue-service booking-service notification-service api-gateway; do
+          for s in user-service venue-service booking-service notification-service payment-service api-gateway; do
             # short reminder interval so the e2e reminder check does not wait 5 minutes
-            (cd backend/$s && REMINDER_INTERVAL_MS=2000 REMINDER_START_DELAY_MS=3000 nohup node app.js > ../../logs/$s.log 2>&1 &)
+            (cd backend/$s || exit 1; REMINDER_INTERVAL_MS=2000 REMINDER_START_DELAY_MS=3000 PAYMENT_SWEEP_INTERVAL_MS=2000 nohup node app.js > ../../logs/$s.log 2>&1 & echo $! > ../../logs/$s.pid)
           done
           for i in $(seq 1 30); do
             curl -fs http://localhost:3000/api/health && exit 0
@@ -83,8 +83,37 @@ jobs:
           done
           echo "Services did not become healthy" && exit 1
 
-      - name: Run end-to-end tests
+      - name: Run end-to-end tests (payments disabled)
         run: node backend/tests/e2e.test.js
+
+      # Payment pipeline against stripe-mock (Stripe's official API emulator): no account or secret needed.
+      # payment-service is restarted in Stripe mode; webhook events are signed locally.
+      - name: Start stripe-mock
+        run: |
+          curl -sL https://github.com/stripe/stripe-mock/releases/download/v0.206.0/stripe-mock_0.206.0_linux_amd64.tar.gz | tar -xz -C /tmp stripe-mock
+          nohup /tmp/stripe-mock -http-port 12111 > logs/stripe-mock.log 2>&1 &
+          # stripe-mock answers 401 without an API key, so probe a real endpoint with the test key
+          for i in $(seq 1 15); do
+            curl -fs -o /dev/null -H "Authorization: Bearer sk_test_123" http://localhost:12111/v1/customers && exit 0
+            sleep 1
+          done
+          echo "stripe-mock did not start" && cat logs/stripe-mock.log && exit 1
+
+      - name: Restart payment-service in Stripe mode
+        run: |
+          # every service runs as "node app.js", so stop this one by its PID; a leftover instance in
+          # disabled mode would share the RPC queue and answer half of the requests
+          kill "$(cat logs/payment-service.pid)"
+          while kill -0 "$(cat logs/payment-service.pid)" 2>/dev/null; do sleep 1; done
+          (cd backend/payment-service && STRIPE_SECRET_KEY=sk_test_123 STRIPE_WEBHOOK_SECRET=whsec_test STRIPE_API_BASE=http://localhost:12111 nohup node app.js > ../../logs/payment-service-stripe.log 2>&1 &)
+          for i in $(seq 1 30); do
+            grep -q "Stripe enabled" logs/payment-service-stripe.log && curl -fs http://localhost:3000/api/health | grep -q '"payment":"up"' && exit 0
+            sleep 2
+          done
+          echo "payment-service did not come back" && exit 1
+
+      - name: Run payment pipeline tests (stripe-mock)
+        run: node backend/tests/payments.mock.test.js
 
       - name: Service logs
         if: always()

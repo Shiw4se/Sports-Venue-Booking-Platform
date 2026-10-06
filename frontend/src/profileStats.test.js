@@ -57,3 +57,11 @@ test('heatmap has Monday-first weeks, counts played games and marks future days'
 test('heat levels are capped at 3', () => {
     expect([0, 1, 2, 3, 7].map(heatLevel)).toEqual([0, 1, 2, 3, 3]);
 });
+
+test('bookings awaiting payment are not counted as games', () => {
+    const pending = { ...booking('p', { day: 3, hour: 10 }), status: 'pending_payment' };
+    const stats = computeStats([...bookings, pending], NOW);
+    expect(stats.gamesPlayed).toBe(2);
+    expect(stats.totalSpent).toBe(60);
+    expect(computeAchievements([pending], NOW).find(a => a.id === 'first').unlocked).toBe(false);
+});

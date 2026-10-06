@@ -17,14 +17,20 @@ import { Stars } from './Stars';
 
 const HISTORY_PAGE = 10;
 
-const BookingItem = ({ booking, onCancel, onBookAgain, onReview }) => {
+// Minutes left to pay for a held slot (0 when the hold has run out)
+const minutesLeft = (until) => Math.max(0, Math.ceil((new Date(until) - Date.now()) / 60000));
+
+const BookingItem = ({ booking, onCancel, onBookAgain, onReview, onPay }) => {
     const start = new Date(booking.start_time);
+    const pending = booking.status === 'pending_payment';
     const isUpcoming = booking.status === 'booked' && start > new Date();
     const played = booking.status === 'booked' && new Date(booking.end_time) <= new Date();
 
     let badge;
-    if (booking.status === 'cancelled') badge = <span className="badge">Cancelled</span>;
-    else if (isUpcoming) badge = <span className="badge badge-success">Active</span>;
+    if (booking.status === 'cancelled' && booking.cancel_reason === 'payment_expired') badge = <span className="badge">Expired</span>;
+    else if (booking.status === 'cancelled') badge = <span className="badge">{booking.refunded_at ? 'Cancelled · Refunded' : 'Cancelled'}</span>;
+    else if (pending) badge = <span className="badge badge-warning">Awaiting payment</span>;
+    else if (isUpcoming) badge = <span className="badge badge-success">{booking.paid_at ? 'Paid' : 'Active'}</span>;
     else badge = <span className="badge">Completed</span>;
 
     return (
@@ -47,11 +53,21 @@ const BookingItem = ({ booking, onCancel, onBookAgain, onReview }) => {
                         {booking.review.comment && <span>“{booking.review.comment}”</span>}
                     </p>
                 )}
+                {pending && booking.hold_expires_at && (
+                    <p className={styles.bookingHold}>
+                        {minutesLeft(booking.hold_expires_at) > 0
+                            ? `Pay within ${minutesLeft(booking.hold_expires_at)} min to keep the slot`
+                            : 'The hold has run out — the slot will be released shortly'}
+                    </p>
+                )}
             </div>
             <div className={styles.bookingSide}>
                 {Number(booking.price) > 0 && <span className={styles.bookingPrice}>{formatMoney(booking.price)}</span>}
                 {badge}
-                {isUpcoming && (
+                {pending && (
+                    <button className="btn btn-primary btn-sm" onClick={() => onPay(booking)}>Pay now</button>
+                )}
+                {(isUpcoming || pending) && (
                     <button className="btn btn-ghost btn-sm" onClick={() => onCancel(booking)}>Cancel</button>
                 )}
                 {played && booking.venue?.name && (
@@ -59,7 +75,7 @@ const BookingItem = ({ booking, onCancel, onBookAgain, onReview }) => {
                         {booking.review ? 'Edit review' : '★ Rate'}
                     </button>
                 )}
-                {!isUpcoming && booking.venue?.name && (
+                {!isUpcoming && !pending && booking.venue?.name && (
                     <button className="btn btn-ghost btn-sm" onClick={() => onBookAgain(booking.venue_id)}>Book again</button>
                 )}
             </div>
@@ -78,7 +94,7 @@ const StatTile = ({ label, value, hint, icon }) => (
     </div>
 );
 
-const UserProfile = ({ onBrowse, onBookAgain, onOpenVenue, onProfileUpdated, favorites = new Set(), onToggleFavorite }) => {
+const UserProfile = ({ onBrowse, onBookAgain, onOpenVenue, onProfileUpdated, favorites = new Set(), onToggleFavorite, refreshKey = 0 }) => {
     const toast = useToast();
     const [user, setUser] = useState(null);
     const [bookings, setBookings] = useState([]);
@@ -99,13 +115,14 @@ const UserProfile = ({ onBrowse, onBookAgain, onOpenVenue, onProfileUpdated, fav
             .then(setBookings)
             .catch(err => toast(`Failed to load profile: ${err.message}`, 'error'))
             .finally(() => setLoading(false));
-    }, [toast]);
+    }, [toast, refreshKey]);
 
     const stats = useMemo(() => computeStats(bookings), [bookings]);
 
     const { upcoming, history } = useMemo(() => {
         const now = new Date();
-        const isUpcoming = (b) => b.status === 'booked' && new Date(b.start_time) > now;
+        // Bookings still awaiting payment are shown with the upcoming games (they hold a slot)
+        const isUpcoming = (b) => (b.status === 'booked' || b.status === 'pending_payment') && new Date(b.start_time) > now;
         return {
             upcoming: bookings.filter(isUpcoming).sort((a, b) => new Date(a.start_time) - new Date(b.start_time)),
             history: bookings.filter(b => !isUpcoming(b)).sort((a, b) => new Date(b.start_time) - new Date(a.start_time)),
@@ -124,13 +141,31 @@ const UserProfile = ({ onBrowse, onBookAgain, onOpenVenue, onProfileUpdated, fav
     const confirmCancel = () => {
         setSubmitting(true);
         apiFetch(`/api/bookings/${cancelling.id}`, { method: 'DELETE', auth: true })
-            .then(() => {
-                setBookings(prev => prev.map(b => (b.id === cancelling.id ? { ...b, status: 'cancelled' } : b)));
-                toast('Booking cancelled', 'success');
+            .then((res) => {
+                setBookings(prev => prev.map(b => (b.id === cancelling.id
+                    ? { ...b, status: 'cancelled', cancel_reason: 'user', refunded_at: res?.refund ? new Date().toISOString() : b.refunded_at }
+                    : b)));
+                toast(res?.message || 'Booking cancelled', 'success');
                 setCancelling(null);
             })
             .catch(err => toast(err.message, 'error'))
             .finally(() => setSubmitting(false));
+    };
+
+    // "Pay now" for a booking that still awaits payment: a fresh Stripe Checkout Session
+    const handlePay = (booking) => {
+        apiFetch(`/api/bookings/${booking.id}/pay`, { method: 'POST', auth: true })
+            .then((res) => {
+                if (res?.checkout_url) {
+                    toast('Redirecting to payment…');
+                    window.location.assign(res.checkout_url);
+                    return;
+                }
+                // payments were switched off meanwhile: the booking is confirmed as is
+                setBookings(prev => prev.map(b => (b.id === booking.id ? { ...b, status: 'booked', hold_expires_at: null } : b)));
+                toast('Booking confirmed!', 'success');
+            })
+            .catch(err => toast(err.message, 'error'));
     };
 
     const handleSaved = (profile) => {
@@ -229,7 +264,7 @@ const UserProfile = ({ onBrowse, onBookAgain, onOpenVenue, onProfileUpdated, fav
                     <>
                         <ul className={styles.bookings}>
                             {list.map(booking => (
-                                <BookingItem key={booking.id} booking={booking} onCancel={setCancelling} onBookAgain={onBookAgain} onReview={setReviewing} />
+                                <BookingItem key={booking.id} booking={booking} onCancel={setCancelling} onBookAgain={onBookAgain} onReview={setReviewing} onPay={handlePay} />
                             ))}
                         </ul>
                         {tab === 'history' && history.length > historyShown && (
@@ -246,6 +281,7 @@ const UserProfile = ({ onBrowse, onBookAgain, onOpenVenue, onProfileUpdated, fav
                     <p className={styles.confirmText}>
                         {cancelling.venue?.name}, {formatDay(cancelling.start_time)},{' '}
                         {formatTimeRange(cancelling.start_time, cancelling.end_time)}. The slot will become available to others.
+                        {cancelling.paid_at && !cancelling.refunded_at && <> You will be refunded <strong>{formatMoney(cancelling.price)}</strong>.</>}
                     </p>
                     <div className={styles.confirmActions}>
                         <button className="btn btn-secondary" onClick={closeCancel}>Keep it</button>

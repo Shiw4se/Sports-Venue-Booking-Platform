@@ -6,10 +6,17 @@ require('dotenv').config();
 const router = express.Router();
 const BOOKING_RPC_QUEUE = process.env.BOOKING_RPC_QUEUE;
 
-// user_id always comes from the token; only slot_id is taken from the body
+// user_id always comes from the token; only slot_id is taken from the body.
+// Admins never pay, so the role travels along.
 router.post('/create', proxyRpc(BOOKING_RPC_QUEUE, (req) => ({
     action: 'create',
-    data: { userId: req.user.id, slot_id: req.body.slot_id },
+    data: { userId: req.user.id, userRole: req.user.role, slot_id: req.body.slot_id },
+})));
+
+// New Checkout Session for a booking that still awaits payment ("Pay now")
+router.post('/:bookingId/pay', proxyRpc(BOOKING_RPC_QUEUE, (req) => ({
+    action: 'pay',
+    data: { id: req.params.bookingId, userId: req.user.id },
 })));
 
 // Users can only view their own bookings

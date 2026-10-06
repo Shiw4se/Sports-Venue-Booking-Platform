@@ -3,7 +3,8 @@
 // Unlike RPC, nobody waits for a reply — e.g. the notification service reacts to bookings
 // without the booking service knowing it exists.
 
-const EXCHANGE = 'sportbook.events';
+// Overridable so a test stack on the same broker does not receive the real stack's events
+const EXCHANGE = process.env.EVENTS_EXCHANGE || 'sportbook.events';
 
 async function setupEvents(channel) {
     await channel.assertExchange(EXCHANGE, 'topic', { durable: true });

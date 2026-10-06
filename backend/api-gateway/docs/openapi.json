@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "SportBook API",
-    "version": "3.0.0",
-    "description": "REST API of the SportBook venue booking platform. The API Gateway forwards requests to the User, Venue and Booking microservices over RabbitMQ RPC.\n\n**Auth:** call `POST /user/login`, then click **Authorize** and paste the token."
+    "version": "4.0.0",
+    "description": "REST API of the SportBook venue booking platform. The API Gateway forwards requests over RabbitMQ RPC to the User, Venue, Booking, Notification and Payment microservices.\n\n**Auth:** call `POST /user/login`, then click **Authorize** and paste the token.\n\n**Payments:** when `STRIPE_SECRET_KEY` is configured, paid slots are booked as `pending_payment` and `POST /bookings/create` returns a `checkout_url` (Stripe Checkout). The slot is held for 30 minutes; the booking becomes `booked` once Stripe confirms the payment (webhook or `GET /payments/verify` on return). Cancelling a paid booking refunds it in full."
   },
   "servers": [
     {
@@ -42,6 +42,10 @@
     {
       "name": "Emails",
       "description": "Dev mailbox (admin)"
+    },
+    {
+      "name": "Payments",
+      "description": "Stripe Checkout, payment verification, webhook"
     }
   ],
   "components": {
@@ -270,6 +274,7 @@
           "status": {
             "type": "string",
             "enum": [
+              "pending_payment",
               "booked",
               "cancelled"
             ]
@@ -300,6 +305,32 @@
                 "nullable": true
               }
             }
+          },
+          "hold_expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Until when the slot is held while awaiting payment"
+          },
+          "paid_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "refunded_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "cancel_reason": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              "user",
+              "payment_expired",
+              "payment_failed",
+              "late_payment"
+            ]
           }
         }
       },
@@ -504,7 +535,8 @@
                     "user": "up",
                     "venue": "up",
                     "booking": "up",
-                    "notification": "up"
+                    "notification": "up",
+                    "payment": "up"
                   },
                   "uptimeSeconds": 42
                 }
@@ -991,7 +1023,7 @@
           "Bookings"
         ],
         "summary": "Book a slot",
-        "description": "The slot is reserved atomically: of two concurrent requests for the same slot only one succeeds, the other gets 409. The price is fixed at booking time.",
+        "description": "The slot is reserved atomically: of two concurrent requests for the same slot only one succeeds, the other gets 409. The price is fixed at booking time. With payments enabled the booking is returned as `pending_payment` together with `checkout_url`; redirect the player there. Without payments (or for admins / free slots) it is `booked` immediately.",
         "security": [
           {
             "bearerAuth": []
@@ -1018,11 +1050,25 @@
         },
         "responses": {
           "201": {
-            "description": "Booked",
+            "description": "Booked, or awaiting payment",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Booking"
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Booking"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "checkout_url": {
+                          "type": "string",
+                          "nullable": true,
+                          "example": "https://checkout.stripe.com/c/pay/cs_test_…"
+                        }
+                      }
+                    }
+                  ]
                 }
               }
             }
@@ -1042,6 +1088,9 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "Payment service unavailable (slot released)"
           }
         }
       }
@@ -1092,7 +1141,7 @@
         "tags": [
           "Bookings"
         ],
-        "summary": "Cancel an own booking",
+        "summary": "Cancel an own booking (a paid booking is refunded in full first)",
         "security": [
           {
             "bearerAuth": []
@@ -1112,13 +1161,40 @@
         ],
         "responses": {
           "200": {
-            "description": "Cancelled"
+            "description": "Cancelled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "refund": {
+                      "type": "object",
+                      "nullable": true,
+                      "properties": {
+                        "amount": {
+                          "type": "number"
+                        },
+                        "status": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
           },
           "409": {
             "description": "Already cancelled"
+          },
+          "502": {
+            "description": "Refund failed — the booking was not cancelled"
           }
         }
       }
@@ -1989,6 +2065,192 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/bookings/{bookingId}/pay": {
+      "post": {
+        "tags": [
+          "Payments",
+          "Bookings"
+        ],
+        "summary": "New Checkout Session for a booking that awaits payment (\"Pay now\")",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "bookingId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Checkout URL (or `{ booked: true }` when payments are disabled)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "checkout_url": {
+                      "type": "string"
+                    },
+                    "hold_expires_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "booked": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Booking does not await payment"
+          },
+          "503": {
+            "description": "Payment service unavailable"
+          }
+        }
+      }
+    },
+    "/payments/verify": {
+      "get": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Check a Checkout Session after the player returns from Stripe",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "description": "Confirms the booking immediately if Stripe reports the session as paid (the webhook does the same; both are idempotent).",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "example": "cs_test_…"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "paymentStatus": {
+                      "type": "string",
+                      "enum": [
+                        "paid",
+                        "pending",
+                        "expired",
+                        "refunded"
+                      ]
+                    },
+                    "bookingId": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Payments are not enabled"
+          }
+        }
+      }
+    },
+    "/payments/webhook": {
+      "post": {
+        "tags": [
+          "Payments"
+        ],
+        "summary": "Stripe webhook endpoint",
+        "description": "Called by Stripe, not by the app. The raw body is verified with `Stripe-Signature` and `STRIPE_WEBHOOK_SECRET`; duplicate events are acknowledged without reprocessing.",
+        "parameters": [
+          {
+            "name": "Stripe-Signature",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "description": "Stripe Event"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Received",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "received": {
+                      "type": "boolean"
+                    },
+                    "duplicate": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid signature"
+          },
+          "500": {
+            "description": "Processing failed — Stripe retries"
           }
         }
       }
