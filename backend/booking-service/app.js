@@ -1,16 +1,14 @@
-require('dotenv').config();
-const express = require('express');
+    require('dotenv').config();
 const { sequelize } = require('./models');
 const { start } = require('./rabbitmq/consumer');
 
-
-const app = express();
-app.use(express.json());
-
-sequelize.sync().then(() => {
-    console.log('DB synced');
-    app.listen(process.env.PORT, async () => {
-        console.log(`Booking Service running on port ${process.env.PORT}`);
-        await start();
+// The schema is created from backend/db/init.sql; here we only check the connection.
+sequelize.authenticate()
+    .then(() => {
+        console.log('Booking Service: DB connected');
+        return start();
+    })
+    .catch((err) => {
+        console.error('Booking Service failed to start:', err);
+        process.exit(1);
     });
-});

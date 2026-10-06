@@ -1,149 +1,84 @@
-﻿require('dotenv').config();
+require('dotenv').config();
 const amqp = require('amqplib');
-const { v4: uuidv4 } = require('uuid');
-const { randomUUID } = require('crypto');
 const jwt = require('jsonwebtoken');
+const { connectWithRetry } = require('../../shared/amqp');
+const { assertRpcQueue, createRpcClient, RpcTimeoutError } = require('../../shared/rpc');
 
-let channel;
+let rpc;
 
 async function connectRabbitMQ() {
-    const connection = await amqp.connect(process.env.RABBITMQ_URL);
-    channel = await connection.createChannel();
+    const connection = await connectWithRetry(amqp, process.env.RABBITMQ_URL);
+    const channel = await connection.createChannel();
+
+    // Declare queues up front so requests are not lost if a service has not started yet
+    for (const queue of [process.env.USER_RPC_QUEUE, process.env.VENUE_RPC_QUEUE, process.env.BOOKING_RPC_QUEUE, process.env.NOTIFICATION_RPC_QUEUE || 'notification_rpc_queue']) {
+        await assertRpcQueue(channel, queue);
+    }
+
+    rpc = await createRpcClient(channel, { timeoutMs: Number(process.env.RPC_TIMEOUT_MS) || 10000 });
     console.log('Connected to RabbitMQ');
 }
 
-async function sendRPCRequest(queue, message) {
-    const correlationId = uuidv4();
-    const replyQueue = await channel.assertQueue('', { exclusive: true });
-
-    return new Promise((resolve) => {
-        channel.consume(
-            replyQueue.queue,
-            (msg) => {
-                if (msg.properties.correlationId === correlationId) {
-                    const data = JSON.parse(msg.content.toString());
-                    resolve(data);
-                }
-            },
-            { noAck: true }
-        );
-
-        channel.sendToQueue(queue, Buffer.from(JSON.stringify(message)), {
-            correlationId,
-            replyTo: replyQueue.queue
-        });
-    });
+function sendRPCRequest(queue, message, options) {
+    return rpc.call(queue, message, options);
 }
 
-async function authenticateUser(req, res, next) {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-        return res.status(401).json({ msg: "Unauthorized: No token provided" });
-    }
-
-    const token = authHeader.split(" ")[1];
-
-    try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        const userId = decoded.id;
-
-        const userResponse = await validateUserWithRPC(userId);
-
-        if (!userResponse || userResponse.success !== false) {
-            return res.status(401).json({ msg: "Unauthorized: Invalid token or user data" });
-        }
-
-        // Якщо перевірка пройшла, перевіряємо роль
-        if (userResponse.role !== 'user') {
-            return res.status(403).json({ msg: "Forbidden: You are not user" });
-        }
-
-        // Якщо все ок, додаємо user в req
-        req.user = userResponse;
-        next();
-    } catch (error) {
-        console.error("JWT or RPC Error:", error);
-        return res.status(401).json({ msg: "Unauthorized: Invalid token" });
-    }
-}
-
-async function authenticateAdmin(req, res, next) {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-        return res.status(401).json({ msg: "Unauthorized: No token provided" });
-    }
-
-    const token = authHeader.split(" ")[1];
-
-    try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        const userId = decoded.id;
-
-        const userResponse = await validateUserWithRPC(userId);
-
-        if (!userResponse || userResponse.success !== true) {
-            return res.status(401).json({ msg: "Unauthorized: Invalid token or user data" });
-        }
-
-        // Якщо перевірка пройшла, перевіряємо роль
-        if (userResponse.role !== 'admin') {
-            return res.status(403).json({ msg: "Forbidden: You are not an admin" });
-        }
-
-        // Якщо все ок, додаємо user в req
-        req.user = userResponse;
-        next();
-    } catch (error) {
-        console.error("JWT or RPC Error:", error);
-        return res.status(401).json({ msg: "Unauthorized: Invalid token" });
-    }
-}
-
-
-
-async function validateUserWithRPC(userId) {
-    return new Promise(async (resolve, reject) => {
+// Route helper: sends an RPC request and returns its { status, body } to the client
+function proxyRpc(queue, buildMessage) {
+    return async (req, res) => {
         try {
-            const correlationId = randomUUID();
-            const replyQueue = await channel.assertQueue('', { exclusive: true });
-
-            channel.consume(
-                replyQueue.queue,
-                (msg) => {
-                    if (msg.properties.correlationId === correlationId) {
-                        let parsed = null;
-                        try {
-                            parsed = JSON.parse(msg.content.toString());
-                        } catch (err) {
-                            return reject(new Error("Failed to parse response"));
-                        }
-
-                        if (!parsed) {
-                            return resolve({ success: false });
-                        }
-
-                        parsed.success = parsed.role === 'admin';
-
-                        resolve(parsed);
-                    }
-                },
-                { noAck: true }
-            );
-
-
-            const payload = {
-                action: "validate_user",
-                data: { userId },
-            };
-
-            channel.sendToQueue("user_rpc_queue", Buffer.from(JSON.stringify(payload)), {
-                correlationId,
-                replyTo: replyQueue.queue,
-            });
-        } catch (error) {
-            reject(error);
+            const response = await sendRPCRequest(queue, buildMessage(req));
+            res.status(response.status).json(response.body);
+        } catch (err) {
+            console.error(err);
+            if (err instanceof RpcTimeoutError) {
+                return res.status(504).json({ message: 'Service unavailable' });
+            }
+            res.status(500).json({ message: 'Internal error' });
         }
-    });
+    };
 }
 
-module.exports = { connectRabbitMQ, sendRPCRequest, authenticateUser, authenticateAdmin };
+// Verifies the JWT, loads the current user from user-service
+// and (optionally) checks their role.
+function authenticate(allowedRoles) {
+    return async (req, res, next) => {
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({ message: 'Unauthorized: No token provided' });
+        }
+
+        let decoded;
+        try {
+            decoded = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET);
+        } catch {
+            return res.status(401).json({ message: 'Unauthorized: Invalid token' });
+        }
+
+        try {
+            const response = await sendRPCRequest(process.env.USER_RPC_QUEUE, {
+                action: 'validate_user',
+                data: { userId: decoded.id },
+            });
+            if (response.status !== 200) {
+                return res.status(401).json({ message: 'Unauthorized: User not found' });
+            }
+
+            const user = response.body;
+            if (allowedRoles && !allowedRoles.includes(user.role)) {
+                return res.status(403).json({ message: 'Forbidden' });
+            }
+
+            req.user = user;
+            next();
+        } catch (err) {
+            console.error('Auth RPC error:', err);
+            return res.status(503).json({ message: 'Auth service unavailable' });
+        }
+    };
+}
+
+const authenticateUser = authenticate(); // any authenticated user
+const authenticateAdmin = authenticate(['admin']);
+
+module.exports = { connectRabbitMQ, sendRPCRequest, proxyRpc, authenticateUser, authenticateAdmin };
