@@ -1,0 +1,76 @@
+.tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+    padding: 4px;
+    margin-bottom: 20px;
+    border-radius: var(--radius-sm);
+    background: var(--surface-muted);
+}
+
+.tab {
+    height: 34px;
+    border: none;
+    border-radius: 6px;
+    background: none;
+    color: var(--text-muted);
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.tabActive {
+    background: var(--surface);
+    color: var(--text);
+    box-shadow: var(--shadow-sm);
+}
+
+.form {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.form button[type='submit'] {
+    margin-top: 6px;
+}
+
+.error {
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    background: var(--danger-soft);
+    color: var(--danger);
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.forgotLink,
+.linkButton {
+    align-self: flex-end;
+    margin-top: -6px;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--primary);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.linkButton {
+    align-self: center;
+    margin-top: 0;
+}
+
+.forgotLink:hover,
+.linkButton:hover {
+    text-decoration: underline;
+}
+
+.notice {
+    padding: 12px 14px;
+    border-radius: var(--radius-sm);
+    background: var(--primary-soft);
+    font-size: 14px;
+    line-height: 1.5;
+}

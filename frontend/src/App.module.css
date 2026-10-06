@@ -1,0 +1,162 @@
+.header {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: color-mix(in srgb, var(--surface) 85%, transparent);
+    backdrop-filter: saturate(180%) blur(10px);
+    border-bottom: 1px solid var(--border);
+}
+
+.headerInner {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    max-width: 1120px;
+    height: 64px;
+    margin: 0 auto;
+    padding: 0 16px;
+}
+
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0;
+    border: none;
+    background: none;
+    font-size: 18px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    cursor: pointer;
+}
+
+.brandMark {
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
+    background: linear-gradient(135deg, var(--primary), #22c55e);
+    color: #fff;
+    font-size: 16px;
+}
+
+.nav {
+    display: flex;
+    gap: 4px;
+    flex: 1;
+}
+
+.navItem {
+    height: 36px;
+    padding: 0 14px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--text-muted);
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background-color 0.15s, color 0.15s;
+}
+
+.navItem:hover {
+    color: var(--text);
+    background: var(--surface-muted);
+}
+
+.navItemActive,
+.navItemActive:hover {
+    color: var(--primary);
+    background: var(--primary-soft);
+}
+
+.account {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.user {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 8px 4px 4px;
+    border: none;
+    border-radius: 999px;
+    background: none;
+    cursor: pointer;
+    transition: background-color 0.15s;
+}
+
+.user:hover {
+    background: var(--surface-muted);
+}
+
+.userEmail {
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.main {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 32px 16px 64px;
+}
+
+.locked {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    max-width: 420px;
+    margin: 48px auto 0;
+    padding: 40px 24px;
+    text-align: center;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+}
+
+.locked h2 {
+    font-size: 20px;
+}
+
+.locked p {
+    margin-bottom: 8px;
+    color: var(--text-muted);
+}
+
+.lockedIcon {
+    font-size: 36px;
+}
+
+@media (max-width: 720px) {
+    .headerInner {
+        flex-wrap: wrap;
+        height: auto;
+        gap: 8px 12px;
+        padding: 10px 16px;
+    }
+
+    .nav {
+        order: 3;
+        flex-basis: 100%;
+    }
+
+    .account {
+        margin-left: auto;
+    }
+
+    .userEmail {
+        display: none;
+    }
+
+    .main {
+        padding-top: 20px;
+    }
+}
