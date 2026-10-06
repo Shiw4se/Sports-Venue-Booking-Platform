@@ -1,0 +1,14 @@
+{
+  "name": "notification-service",
+  "private": true,
+  "scripts": {
+    "start": "node app.js"
+  },
+  "dependencies": {
+    "amqplib": "^0.10.9",
+    "dotenv": "^16.6.1",
+    "nodemailer": "^10.0.15",
+    "pg": "^8.23.1",
+    "sequelize": "^6.37.8"
+  }
+}

@@ -1,37 +1,49 @@
 require('dotenv').config();
 const amqp = require('amqplib');
-const {createBooking, getBookingsByUser, cancelBooking } = require('../controllers/booking.controller');
+const { connectWithRetry } = require('../../shared/amqp');
+const { assertRpcQueue, serveRpc, createRpcClient } = require('../../shared/rpc');
+const { createEventPublisher } = require('../../shared/events');
+const bookings = require('../controllers/booking.controller');
+const reviews = require('../controllers/review.controller');
 
+const REMINDER_INTERVAL_MS = Number(process.env.REMINDER_INTERVAL_MS) || 5 * 60 * 1000;
 
 async function start() {
-    const connection = await amqp.connect(process.env.RABBITMQ_URL);
-    const channel = await connection.createChannel();
+    const connection = await connectWithRetry(amqp, process.env.RABBITMQ_URL);
 
-    await channel.assertQueue(process.env.RPC_QUEUE, { durable: false });
-    console.log(`[x] Waiting for RPC requests on ${process.env.RPC_QUEUE}`);
+    // Separate channel for outgoing requests to venue-service and user-service
+    const clientChannel = await connection.createChannel();
+    await assertRpcQueue(clientChannel, process.env.VENUE_RPC_QUEUE);
+    await assertRpcQueue(clientChannel, process.env.USER_RPC_QUEUE || 'user_rpc_queue');
+    const rpc = await createRpcClient(clientChannel);
+    bookings.setVenueRpc(rpc);
 
-    channel.consume(process.env.BOOKING_RPC_QUEUE, async (msg) => {
-        const {action, data} = JSON.parse(msg.content.toString());
+    const eventsChannel = await connection.createChannel();
+    const publish = await createEventPublisher(eventsChannel);
+    bookings.setEventPublisher(publish);
+    reviews.setReviewDeps({ userRpc: rpc, publish });
 
-        let response;
-        if (action === 'create') {
-            response = await createBooking(data);
-        } else if (action === 'get') {
-            response = await getBookingsByUser(data.userId);
-        } else if (action === 'cancel') {
-            response = await cancelBooking(data.id);
-        } else {
-            response = {status: 400, body: {message: 'Unknown action'}};
-        }
-
-        channel.sendToQueue(
-            msg.properties.replyTo,
-            Buffer.from(JSON.stringify(response)),
-            {correlationId: msg.properties.correlationId}
-        );
-
-        channel.ack(msg);
+    const serverChannel = await connection.createChannel();
+    await serveRpc(serverChannel, process.env.RPC_QUEUE, {
+        create: bookings.createBooking,
+        get: bookings.getBookingsByUser,
+        cancel: bookings.cancelBooking,
+        stats: bookings.getStats,
+        upsert_review: reviews.upsertReview,
+        venue_reviews: reviews.getVenueReviews,
     });
+
+    // Day-before reminders
+    const runReminders = () => bookings.sendDueReminders()
+        .then(n => n && console.log(`Queued ${n} reminder(s)`))
+        .catch(err => console.error('Reminder job failed:', err));
+    // The first run waits a little: on a fresh broker the notification queue may not exist yet,
+    // and events published to an exchange with no bound queue are dropped. Once created, the
+    // queue is durable and keeps events even while notification-service is down.
+    setTimeout(() => {
+        runReminders();
+        setInterval(runReminders, REMINDER_INTERVAL_MS);
+    }, Number(process.env.REMINDER_START_DELAY_MS ?? 30000));
 }
 
 module.exports = { start };
