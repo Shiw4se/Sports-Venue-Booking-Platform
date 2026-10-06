@@ -1,0 +1,303 @@
+.header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.title {
+    font-size: 30px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+}
+
+.subtitle,
+.muted {
+    margin-top: 6px;
+    color: var(--text-muted);
+}
+
+/* ---------- Stat tiles ---------- */
+
+.tiles {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.tile {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-height: 112px;
+    padding: 18px 20px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    box-shadow: var(--shadow-sm);
+}
+
+.tileLabel {
+    color: var(--text-muted);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.tileValue {
+    font-size: 30px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+}
+
+.tileHint {
+    color: var(--text-subtle);
+    font-size: 13px;
+}
+
+.skeleton {
+    background: linear-gradient(90deg, var(--surface-muted) 0, var(--border) 50%, var(--surface-muted) 100%);
+    background-size: 800px 100%;
+    animation: shimmer 1.4s linear infinite;
+}
+
+/* ---------- Panels ---------- */
+
+.panels {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 16px;
+}
+
+.panel {
+    padding: 20px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    box-shadow: var(--shadow-sm);
+}
+
+.panelTitle {
+    margin-bottom: 16px;
+    font-size: 16px;
+    font-weight: 700;
+}
+
+/* ---------- Column chart ---------- */
+
+.chart {
+    margin: 0;
+}
+
+.plot {
+    display: flex;
+    height: 200px;
+}
+
+.yAxis,
+.yAxisSpacer {
+    width: 32px;
+    flex-shrink: 0;
+}
+
+.yAxis {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding-right: 8px;
+    color: var(--text-subtle);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    transform: translateY(-0.5em);
+}
+
+.yAxis span:last-child {
+    transform: translateY(1em);
+}
+
+.columns {
+    position: relative;
+    display: flex;
+    flex: 1;
+    border-bottom: 1px solid var(--border-strong);
+}
+
+.gridline {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: var(--grid);
+}
+
+.column {
+    position: relative;
+    display: flex;
+    flex: 1;
+    align-items: flex-end;
+    justify-content: center;
+    cursor: default;
+}
+
+.bar {
+    position: relative;
+    width: 24px;
+    min-height: 2px;
+    border-radius: 4px 4px 0 0;
+    background: var(--chart);
+    transition: opacity 0.15s;
+}
+
+.columns:hover .bar {
+    opacity: 0.45;
+}
+
+.columns:hover .column:hover .bar {
+    opacity: 1;
+}
+
+.capLabel {
+    position: absolute;
+    margin-bottom: 4px;
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.tooltip {
+    position: absolute;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 8px;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    box-shadow: var(--shadow-lg);
+    font-size: 12px;
+    white-space: nowrap;
+    pointer-events: none;
+}
+
+.tooltip span {
+    color: var(--text-muted);
+}
+
+.xAxis {
+    display: flex;
+    margin-top: 8px;
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.xAxis span:not(.yAxisSpacer) {
+    flex: 1;
+    text-align: center;
+}
+
+.tableToggle {
+    margin-top: 12px;
+    font-size: 13px;
+}
+
+.tableToggle summary {
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.table {
+    width: 100%;
+    margin-top: 8px;
+    border-collapse: collapse;
+}
+
+.table th,
+.table td {
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+}
+
+.table td:last-child,
+.table th:last-child {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Ranked bar list ---------- */
+
+.ranking {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.rankText {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 6px;
+    font-size: 14px;
+}
+
+.rankName {
+    font-weight: 600;
+}
+
+.rankRevenue {
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.rankTrack {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.rankBar {
+    height: 12px;
+    min-width: 2px;
+    border-radius: 0 4px 4px 0;
+    background: var(--chart);
+}
+
+.rankValue {
+    color: var(--text-muted);
+    font-size: 13px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 48px 16px;
+    color: var(--text-muted);
+}
+
+@media (max-width: 900px) {
+    .tiles {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .panels {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 480px) {
+    .tileValue {
+        font-size: 24px;
+    }
+}

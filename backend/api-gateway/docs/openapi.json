@@ -1,0 +1,1997 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "SportBook API",
+    "version": "3.0.0",
+    "description": "REST API of the SportBook venue booking platform. The API Gateway forwards requests to the User, Venue and Booking microservices over RabbitMQ RPC.\n\n**Auth:** call `POST /user/login`, then click **Authorize** and paste the token."
+  },
+  "servers": [
+    {
+      "url": "/api"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Auth",
+      "description": "Registration, login, profile"
+    },
+    {
+      "name": "Venues",
+      "description": "Venues and time slots"
+    },
+    {
+      "name": "Bookings",
+      "description": "Bookings of the current user"
+    },
+    {
+      "name": "Admin",
+      "description": "Admin-only endpoints"
+    },
+    {
+      "name": "System",
+      "description": "Health check"
+    },
+    {
+      "name": "Favorites",
+      "description": "Saved venues"
+    },
+    {
+      "name": "Reviews",
+      "description": "Ratings of played games"
+    },
+    {
+      "name": "Emails",
+      "description": "Dev mailbox (admin)"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "example": "Slot is not available"
+          }
+        }
+      },
+      "VenueType": {
+        "type": "string",
+        "enum": [
+          "football_field",
+          "tennis_court",
+          "basketball_court"
+        ]
+      },
+      "Venue": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "example": "Riverside Arena"
+          },
+          "location": {
+            "type": "string",
+            "example": "12 Park Ave"
+          },
+          "type": {
+            "$ref": "#/components/schemas/VenueType"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "price_per_hour": {
+            "type": "string",
+            "example": "40.00",
+            "description": "Decimal as string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "surface": {
+            "type": "string",
+            "nullable": true,
+            "example": "Artificial turf"
+          },
+          "indoor": {
+            "type": "boolean"
+          },
+          "capacity": {
+            "type": "integer",
+            "nullable": true,
+            "minimum": 1,
+            "maximum": 100,
+            "example": 10
+          },
+          "amenities": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "lighting",
+                "changing_rooms",
+                "showers",
+                "parking",
+                "equipment_rental",
+                "cafe",
+                "seating",
+                "coaching"
+              ]
+            }
+          },
+          "photo_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Gallery, first = cover"
+          },
+          "rating_avg": {
+            "type": "string",
+            "nullable": true,
+            "example": "4.30"
+          },
+          "rating_count": {
+            "type": "integer",
+            "example": 30
+          }
+        }
+      },
+      "VenueInput": {
+        "type": "object",
+        "required": [
+          "name",
+          "location",
+          "type"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "location": {
+            "type": "string"
+          },
+          "type": {
+            "$ref": "#/components/schemas/VenueType"
+          },
+          "description": {
+            "type": "string"
+          },
+          "price_per_hour": {
+            "type": "number",
+            "minimum": 0,
+            "example": 40
+          },
+          "surface": {
+            "type": "string",
+            "nullable": true,
+            "example": "Artificial turf"
+          },
+          "indoor": {
+            "type": "boolean"
+          },
+          "capacity": {
+            "type": "integer",
+            "nullable": true,
+            "minimum": 1,
+            "maximum": 100,
+            "example": 10
+          },
+          "amenities": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "lighting",
+                "changing_rooms",
+                "showers",
+                "parking",
+                "equipment_rental",
+                "cafe",
+                "seating",
+                "coaching"
+              ]
+            }
+          }
+        }
+      },
+      "Slot": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "venue_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "start_time": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "end_time": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "is_available": {
+            "type": "boolean"
+          },
+          "venue": {
+            "$ref": "#/components/schemas/Venue"
+          }
+        }
+      },
+      "Booking": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "venue_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "slot_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "start_time": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "end_time": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "price": {
+            "type": "string",
+            "example": "60.00"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "booked",
+              "cancelled"
+            ]
+          },
+          "venue": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "type": {
+                "$ref": "#/components/schemas/VenueType"
+              },
+              "location": {
+                "type": "string"
+              }
+            }
+          },
+          "review": {
+            "type": "object",
+            "nullable": true,
+            "properties": {
+              "rating": {
+                "type": "integer"
+              },
+              "comment": {
+                "type": "string",
+                "nullable": true
+              }
+            }
+          }
+        }
+      },
+      "User": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "name": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "user",
+              "admin"
+            ]
+          },
+          "avatar_color": {
+            "type": "string",
+            "nullable": true,
+            "example": "#7c3aed"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "avatar_url": {
+            "type": "string",
+            "nullable": true,
+            "example": "/api/user/avatar/0b6f…?v=1791276560798"
+          }
+        }
+      },
+      "Stats": {
+        "type": "object",
+        "properties": {
+          "activeBookings": {
+            "type": "integer"
+          },
+          "cancelledBookings": {
+            "type": "integer"
+          },
+          "upcomingBookings": {
+            "type": "integer"
+          },
+          "revenue": {
+            "type": "number"
+          },
+          "topVenues": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "venueId": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "bookings": {
+                  "type": "integer"
+                },
+                "revenue": {
+                  "type": "number"
+                }
+              }
+            }
+          },
+          "nextDays": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "date": {
+                  "type": "string",
+                  "format": "date"
+                },
+                "bookings": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        }
+      },
+      "Review": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "rating": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5
+          },
+          "comment": {
+            "type": "string",
+            "nullable": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "author": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "avatar_url": {
+                "type": "string",
+                "nullable": true
+              },
+              "avatar_color": {
+                "type": "string",
+                "nullable": true
+              }
+            }
+          }
+        }
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "Validation error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Missing or invalid token",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "Not allowed for this user",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Not found",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
+    },
+    "parameters": {
+      "IdPath": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      }
+    }
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "System"
+        ],
+        "summary": "Health of the gateway and every microservice",
+        "responses": {
+          "200": {
+            "description": "All services are up",
+            "content": {
+              "application/json": {
+                "example": {
+                  "status": "ok",
+                  "services": {
+                    "user": "up",
+                    "venue": "up",
+                    "booking": "up",
+                    "notification": "up"
+                  },
+                  "uptimeSeconds": 42
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "At least one service is down"
+          }
+        }
+      }
+    },
+    "/user/register": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Register a new user",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "email",
+                  "password"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 6
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "email": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "429": {
+            "description": "Too many attempts"
+          }
+        }
+      }
+    },
+    "/user/login": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Log in and get a JWT",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "email",
+                  "password"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "example": "demo@sportbook.dev"
+                  },
+                  "password": {
+                    "type": "string",
+                    "example": "demo1234"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "token": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "description": "Too many attempts"
+          }
+        }
+      }
+    },
+    "/user/profile": {
+      "get": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Current user",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Update own name and avatar color",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "maxLength": 60
+                  },
+                  "avatar_color": {
+                    "type": "string",
+                    "nullable": true,
+                    "pattern": "^#[0-9a-fA-F]{6}$"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/venue/get_all": {
+      "get": {
+        "tags": [
+          "Venues"
+        ],
+        "summary": "List venues",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Venue"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/venue/find_by_id/{id}": {
+      "get": {
+        "tags": [
+          "Venues"
+        ],
+        "summary": "Slots of a venue",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdPath"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Slot"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/venue/create": {
+      "post": {
+        "tags": [
+          "Venues",
+          "Admin"
+        ],
+        "summary": "Create a venue",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VenueInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Venue"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/venue/update/{id}": {
+      "put": {
+        "tags": [
+          "Venues",
+          "Admin"
+        ],
+        "summary": "Update a venue (partial update)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdPath"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VenueInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Venue"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/venue/delete/{id}": {
+      "delete": {
+        "tags": [
+          "Venues",
+          "Admin"
+        ],
+        "summary": "Delete a venue with all its slots and bookings",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdPath"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/venue/createslot/{venueId}": {
+      "post": {
+        "tags": [
+          "Venues",
+          "Admin"
+        ],
+        "summary": "Create a time slot",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "venueId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "start_time",
+                  "end_time"
+                ],
+                "properties": {
+                  "start_time": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "end_time": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Slot"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/venue/deleteslot/{id}": {
+      "delete": {
+        "tags": [
+          "Venues",
+          "Admin"
+        ],
+        "summary": "Delete a slot",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdPath"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/bookings/create": {
+      "post": {
+        "tags": [
+          "Bookings"
+        ],
+        "summary": "Book a slot",
+        "description": "The slot is reserved atomically: of two concurrent requests for the same slot only one succeeds, the other gets 409. The price is fixed at booking time.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "slot_id"
+                ],
+                "properties": {
+                  "slot_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Booked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Booking"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Slot is not available",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/bookings/{id}": {
+      "get": {
+        "tags": [
+          "Bookings"
+        ],
+        "summary": "Bookings of the current user (userId must match the token)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "User id (GET) — must match the token",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Booking"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Bookings"
+        ],
+        "summary": "Cancel an own booking",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Booking id (DELETE)",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cancelled"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Already cancelled"
+          }
+        }
+      }
+    },
+    "/admin/stats": {
+      "get": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Dashboard statistics",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Stats"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
+    },
+    "/user/password": {
+      "put": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Change own password",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "currentPassword",
+                  "newPassword"
+                ],
+                "properties": {
+                  "currentPassword": {
+                    "type": "string"
+                  },
+                  "newPassword": {
+                    "type": "string",
+                    "minLength": 6
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Changed"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/user/avatar": {
+      "put": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Upload a profile photo",
+        "description": "The client crops and resizes the image (the web app sends a 256×256 WebP).",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "dataUrl"
+                ],
+                "properties": {
+                  "dataUrl": {
+                    "type": "string",
+                    "example": "data:image/webp;base64,UklGR…"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated profile",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "413": {
+            "description": "Image larger than 300 KB"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Remove the profile photo",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Updated profile",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/user/avatar/{id}": {
+      "get": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Profile photo of a user",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdPath"
+          },
+          {
+            "name": "v",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Version from avatar_url; versioned responses are cached for a year"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Image",
+            "content": {
+              "image/webp": {},
+              "image/jpeg": {},
+              "image/png": {}
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/user/password/forgot": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Email a password reset link",
+        "description": "Always answers 200 so it cannot be used to discover registered emails. Rate limited.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "email"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "If the email is registered, a link has been sent"
+          },
+          "429": {
+            "description": "Too many attempts"
+          }
+        }
+      }
+    },
+    "/user/password/reset": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Set a new password with the emailed token (valid 1 hour, single use)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "token",
+                  "newPassword"
+                ],
+                "properties": {
+                  "token": {
+                    "type": "string"
+                  },
+                  "newPassword": {
+                    "type": "string",
+                    "minLength": 6
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Password updated"
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/user/favorites": {
+      "get": {
+        "tags": [
+          "Favorites"
+        ],
+        "summary": "Saved venue ids of the current user",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/user/favorites/{venueId}": {
+      "put": {
+        "tags": [
+          "Favorites"
+        ],
+        "summary": "Save a venue",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "venueId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Updated list of saved ids"
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Favorites"
+        ],
+        "summary": "Unsave a venue",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "venueId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Updated list of saved ids"
+          }
+        }
+      }
+    },
+    "/venue/{id}/reviews": {
+      "get": {
+        "tags": [
+          "Reviews",
+          "Venues"
+        ],
+        "summary": "Rating summary, star distribution and latest reviews",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdPath"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "maximum": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "average": {
+                      "type": "number",
+                      "nullable": true
+                    },
+                    "count": {
+                      "type": "integer"
+                    },
+                    "distribution": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "integer"
+                      },
+                      "example": {
+                        "1": 0,
+                        "2": 2,
+                        "3": 3,
+                        "4": 9,
+                        "5": 16
+                      }
+                    },
+                    "reviews": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Review"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/bookings/{bookingId}/review": {
+      "post": {
+        "tags": [
+          "Reviews",
+          "Bookings"
+        ],
+        "summary": "Rate a played game (creates or updates the review)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "bookingId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "rating"
+                ],
+                "properties": {
+                  "rating": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 5
+                  },
+                  "comment": {
+                    "type": "string",
+                    "maxLength": 1000
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated"
+          },
+          "201": {
+            "description": "Created"
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The game has not been played yet"
+          }
+        }
+      }
+    },
+    "/venue/createslots/{venueId}": {
+      "post": {
+        "tags": [
+          "Venues",
+          "Admin"
+        ],
+        "summary": "Create many slots at once (recurring schedules)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "description": "Slots in the past or overlapping existing slots / each other are skipped instead of failing the request.",
+        "parameters": [
+          {
+            "name": "venueId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "slots"
+                ],
+                "properties": {
+                  "slots": {
+                    "type": "array",
+                    "maxItems": 500,
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "start_time": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "end_time": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "created": {
+                      "type": "integer"
+                    },
+                    "skipped": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed for this user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/venue/{id}/photos": {
+      "post": {
+        "tags": [
+          "Venues",
+          "Admin"
+        ],
+        "summary": "Upload a gallery photo (≤ 900 KB, up to 8 per venue)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdPath"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "dataUrl"
+                ],
+                "properties": {
+                  "dataUrl": {
+                    "type": "string",
+                    "example": "data:image/webp;base64,UklGR…"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Updated venue",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Venue"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not allowed for this user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Photo limit reached"
+          },
+          "413": {
+            "description": "Photo too large"
+          }
+        }
+      }
+    },
+    "/venue/photos/{photoId}": {
+      "get": {
+        "tags": [
+          "Venues"
+        ],
+        "summary": "Photo image (cached for a year)",
+        "parameters": [
+          {
+            "name": "photoId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Image",
+            "content": {
+              "image/webp": {},
+              "image/jpeg": {},
+              "image/png": {}
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Venues",
+          "Admin"
+        ],
+        "summary": "Delete a photo",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "photoId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Updated venue"
+          },
+          "403": {
+            "description": "Not allowed for this user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/emails": {
+      "get": {
+        "tags": [
+          "Emails",
+          "Admin"
+        ],
+        "summary": "Emails produced by the notification service",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "maximum": 200
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "403": {
+            "description": "Not allowed for this user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/emails/{id}": {
+      "get": {
+        "tags": [
+          "Emails",
+          "Admin"
+        ],
+        "summary": "One email with HTML and text bodies",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdPath"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
