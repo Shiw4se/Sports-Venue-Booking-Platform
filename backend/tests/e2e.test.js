@@ -10,6 +10,23 @@ userServiceRequire('dotenv').config({ path: path.join(__dirname, '../user-servic
 const { Client } = userServiceRequire('pg');
 
 const API = process.env.E2E_API_URL || 'http://localhost:3000/api';
+
+// Opt-in Stripe checks run only when payment-service has a test key configured
+const paymentEnv = (() => {
+    try {
+        return userServiceRequire('dotenv').parse(require('fs').readFileSync(path.join(__dirname, '../payment-service/.env')));
+    } catch {
+        return {};
+    }
+})();
+const STRIPE_ENABLED = Boolean(process.env.STRIPE_SECRET_KEY || paymentEnv.STRIPE_SECRET_KEY);
+const STRIPE_MOCK = Boolean(process.env.STRIPE_API_BASE || paymentEnv.STRIPE_API_BASE);
+const WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || paymentEnv.STRIPE_WEBHOOK_SECRET || 'whsec_test';
+if (STRIPE_ENABLED && !STRIPE_MOCK) {
+    console.error('With a real Stripe key this suite would issue refunds for fake payments. Run it with payments disabled or against stripe-mock (STRIPE_API_BASE); see backend/tests/payments.mock.test.js and README for the manual Stripe checklist.');
+    process.exit(1);
+}
+const Stripe = STRIPE_ENABLED ? createRequire(path.join(__dirname, '../payment-service/package.json'))('stripe') : null;
 const stamp = Date.now();
 let failures = 0;
 
@@ -32,6 +49,25 @@ async function waitFor(fn, timeoutMs = 10000) {
     return null;
 }
 
+// Stripe mode: confirm a pending booking the way Stripe does — a signed checkout.session.completed event
+async function confirmViaWebhook(db, bookingId) {
+    const { rows: [payment] } = await db.query('SELECT stripe_session_id, amount FROM payments WHERE booking_id = $1', [bookingId]);
+    const payload = JSON.stringify({
+        id: `evt_e2e_${stamp}_${bookingId.slice(0, 8)}`, object: 'event', type: 'checkout.session.completed',
+        created: Math.floor(Date.now() / 1000),
+        data: { object: { id: payment.stripe_session_id, object: 'checkout.session', status: 'complete', payment_status: 'paid',
+            amount_total: Math.round(Number(payment.amount) * 100), payment_intent: `pi_e2e_${bookingId.slice(0, 8)}`,
+            client_reference_id: bookingId, metadata: { bookingId } } },
+    });
+    const signature = Stripe.webhooks.generateTestHeaderString({ payload, secret: WEBHOOK_SECRET });
+    const res = await fetch(API + '/payments/webhook', { method: 'POST', headers: { 'Content-Type': 'application/json', 'stripe-signature': signature }, body: payload });
+    if (res.status !== 200) throw new Error(`webhook confirm failed: ${res.status}`);
+    return waitFor(async () => {
+        const { rows: [b] } = await db.query('SELECT status, paid_at FROM bookings WHERE id = $1', [bookingId]);
+        return b?.status === 'booked' ? b : null;
+    });
+}
+
 function check(name, ok, detail = '') {
     if (!ok) failures++;
     console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? `  (${detail})` : ''}`);
@@ -46,6 +82,7 @@ async function main() {
     try {
         const health = await call('GET', '/health');
         check('health: all services up', health.status === 200 && health.body.status === 'ok', JSON.stringify(health.body?.services));
+        check('health includes the payment service', health.body?.services?.payment === 'up');
         const docs = await fetch(API + '/openapi.json');
         check('OpenAPI spec is served', docs.status === 200);
 
@@ -163,6 +200,21 @@ async function main() {
         const winner = b1.status === 201 ? { token: userT, booking: b1.body } : { token: otherT, booking: b2.body };
         const loserToken = winner.token === userT ? otherT : userT;
         check('booking price = hourly price × duration', Number(winner.booking.price) === 60, winner.booking.price);
+        if (STRIPE_ENABLED) {
+            check('with Stripe the booking awaits payment and has a Checkout URL',
+                winner.booking.status === 'pending_payment' && /^https:\/\/checkout\.stripe\.com\//.test(winner.booking.checkout_url || ''),
+                winner.booking.status);
+            const holdMs = new Date(winner.booking.hold_expires_at) - Date.now();
+            check('slot is held for ~30 minutes', holdMs > 25 * 60000 && holdMs <= 31 * 60000, Math.round(holdMs / 60000) + ' min');
+            // The rest of the suite expects a confirmed booking: pay it via a signed webhook
+            check('Stripe: signed webhook confirms the booking', Boolean(await confirmViaWebhook(db, winner.booking.id)));
+            winner.booking.status = 'booked';
+        } else {
+            check('without Stripe the booking is confirmed immediately',
+                winner.booking.status === 'booked' && !winner.booking.checkout_url, winner.booking.status);
+        }
+        const payBooked = await call('POST', `/bookings/${winner.booking.id}/pay`, { token: winner.token });
+        check('"pay" on a confirmed booking -> 409', payBooked.status === 409, payBooked.status);
 
         const mine = await call('GET', `/bookings/${winner.booking.user_id}`, { token: winner.token });
         check('own bookings include venue name, type and location', mine.status === 200
@@ -183,12 +235,14 @@ async function main() {
 
         const cancel = await call('DELETE', `/bookings/${winner.booking.id}`, { token: winner.token });
         check('owner cancels booking', cancel.status === 200, cancel.status);
+        if (STRIPE_ENABLED) check('Stripe: cancelling the paid booking refunds it', cancel.body?.refund?.amount === 60, JSON.stringify(cancel.body));
         const again = await call('DELETE', `/bookings/${winner.booking.id}`, { token: winner.token });
         check('cancel twice -> 409', again.status === 409, again.status);
         const freed = await call('GET', `/venue/find_by_id/${venueId}`);
         check('slot is available again', freed.body[0]?.is_available === true);
         const rebook = await call('POST', '/bookings/create', { token: loserToken, body: { slot_id: slotId } });
         check('freed slot can be rebooked', rebook.status === 201, rebook.status);
+        if (STRIPE_ENABLED) check('Stripe: rebooked slot confirmed via webhook', Boolean(await confirmViaWebhook(db, rebook.body.id)));
 
         // ---------- Recurring slots ----------
         const overlapSingle = await call('POST', `/venue/createslot/${venueId}`, { token: adminT, body: { start_time: start, end_time: end } });
@@ -249,7 +303,7 @@ async function main() {
         check('edit own review', reviewEdit.status === 200 && reviewEdit.body.rating === 4, reviewEdit.status);
         const reviews = await call('GET', `/venue/${venueId}/reviews`);
         check('venue reviews: average, distribution, author', reviews.status === 200 && reviews.body.average === 4
-            && reviews.body.count === 1 && reviews.body.distribution['4'] === 1 && reviews.body.reviews[0]?.author?.name === 'E2E'
+            && reviews.body.count === 1 && reviews.body.distribution['4'] === 1 && /^E2E/.test(reviews.body.reviews[0]?.author?.name || '')
             && reviews.body.reviews[0]?.comment === 'Good pitch', JSON.stringify(reviews.body).slice(0, 120));
         const rated = await waitFor(async () => {
             const v = (await call('GET', '/venue/get_all')).body.find(x => x.id === venueId);
@@ -273,6 +327,61 @@ async function main() {
         await db.query("UPDATE bookings SET start_time = now() + interval '2 hours', end_time = now() + interval '3 hours', reminder_sent_at = NULL WHERE id = $1", [rebook.body.id]);
         const loserEmail = loserToken === userT ? emails[0] : emails[1];
         check('day-before reminder email', Boolean(await mailFor(loserEmail, 'booking_reminder')));
+
+        // ---------- Payments ----------
+        const badSig = await fetch(API + '/payments/webhook', {
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'stripe-signature': 't=1,v1=bad' }, body: '{}',
+        });
+        check('webhook with a bad signature -> 400', badSig.status === 400, badSig.status);
+        const noSig = await fetch(API + '/payments/webhook', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        check('webhook without a signature -> 400', noSig.status === 400, noSig.status);
+        const verifyUnknown = await call('GET', '/payments/verify?session_id=cs_test_nope', { token: userT });
+        check('verify of an unknown session -> 404 / 503', [404, 503].includes(verifyUnknown.status), verifyUnknown.status);
+        const verifyNoAuth = await call('GET', '/payments/verify?session_id=cs_test_nope');
+        check('verify without a token -> 401', verifyNoAuth.status === 401, verifyNoAuth.status);
+
+        if (STRIPE_ENABLED) {
+            // A paid slot: booking awaits payment, the slot is held, "pay" issues a new session, the hold expires
+            const s2 = new Date(start.getTime() + 3 * 3600000);
+            const slot2 = await call('POST', `/venue/createslot/${venueId}`, { token: adminT, body: { start_time: s2, end_time: new Date(s2.getTime() + 3600000) } });
+            const held = await call('POST', '/bookings/create', { token: userT, body: { slot_id: slot2.body.id } });
+            check('Stripe: booking is pending with a Checkout URL', held.status === 201 && held.body.status === 'pending_payment'
+                && /^https:\/\/checkout\.stripe\.com\//.test(held.body.checkout_url || ''), held.status);
+            const heldSlot = (await call('GET', `/venue/find_by_id/${venueId}`)).body.find(s => s.id === slot2.body.id);
+            check('Stripe: held slot is unavailable to others', heldSlot?.is_available === false);
+            const other = await call('POST', '/bookings/create', { token: otherT, body: { slot_id: slot2.body.id } });
+            check('Stripe: another player cannot book a held slot -> 409', other.status === 409, other.status);
+            const payAgain = await call('POST', `/bookings/${held.body.id}/pay`, { token: userT });
+            const sessionId = (await db.query('SELECT stripe_session_id FROM payments WHERE booking_id = $1', [held.body.id])).rows[0]?.stripe_session_id;
+            check('Stripe: "pay" issues a fresh Checkout URL', payAgain.status === 200 && /^https:\/\/checkout\.stripe\.com\//.test(payAgain.body.checkout_url || ''), payAgain.status);
+            const verifyOpen = await call('GET', `/payments/verify?session_id=${sessionId}`, { token: userT });
+            check('Stripe: verify of an unpaid session -> pending', verifyOpen.status === 200 && verifyOpen.body.paymentStatus === 'pending', JSON.stringify(verifyOpen.body));
+
+            // Expire the hold: the sweep releases the slot, emails the player and the session is closed
+            await db.query("UPDATE bookings SET hold_expires_at = now() - interval '1 minute' WHERE id = $1", [held.body.id]);
+            const expired = await waitFor(async () => {
+                const mine = (await call('GET', `/bookings/${held.body.user_id}`, { token: userT })).body;
+                const b = mine.find(x => x.id === held.body.id);
+                return b?.status === 'cancelled' && b.cancel_reason === 'payment_expired' ? b : null;
+            }, 20000);
+            check('Stripe: expired hold is cancelled with reason payment_expired', Boolean(expired));
+            const freedSlot = await waitFor(async () => {
+                const s = (await call('GET', `/venue/find_by_id/${venueId}`)).body.find(x => x.id === slot2.body.id);
+                return s?.is_available ? s : null;
+            });
+            check('Stripe: expired hold releases the slot', Boolean(freedSlot));
+            const verifyExpired = await waitFor(async () => {
+                const v = await call('GET', `/payments/verify?session_id=${sessionId}`, { token: userT });
+                return v.body?.paymentStatus === 'expired' ? v : null;
+            });
+            check('Stripe: verify after expiry -> expired', Boolean(verifyExpired));
+
+            // Cancelling a pending booking needs no refund
+            const held2 = await call('POST', '/bookings/create', { token: userT, body: { slot_id: slot2.body.id } });
+            const cancelPending = await call('DELETE', `/bookings/${held2.body.id}`, { token: userT });
+            check('Stripe: cancelling an unpaid booking -> 200 without refund', cancelPending.status === 200 && !cancelPending.body.refund, cancelPending.status);
+            check('Stripe: reservation-expired email', Boolean(await mailFor(emails[0], 'booking_expired')));
+        }
 
         // ---------- Password reset ----------
         const forgotUnknown = await call('POST', '/user/password/forgot', { body: { email: `nobody-${stamp}@e2e.test` } });
@@ -302,6 +411,7 @@ async function main() {
         if (venueId) await db.query('DELETE FROM venues WHERE id = $1', [venueId]);
         await db.query("DELETE FROM users WHERE email LIKE '%@e2e.test'");
         await db.query("DELETE FROM emails WHERE to_email LIKE '%@e2e.test'");
+        await db.query('DELETE FROM stripe_events WHERE event_id LIKE $1', [`evt_e2e_${stamp}_%`]);
         await db.end();
     }
 

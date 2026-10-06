@@ -11,7 +11,14 @@ async function connectRabbitMQ() {
     const channel = await connection.createChannel();
 
     // Declare queues up front so requests are not lost if a service has not started yet
-    for (const queue of [process.env.USER_RPC_QUEUE, process.env.VENUE_RPC_QUEUE, process.env.BOOKING_RPC_QUEUE, process.env.NOTIFICATION_RPC_QUEUE || 'notification_rpc_queue']) {
+    const queues = [
+        process.env.USER_RPC_QUEUE,
+        process.env.VENUE_RPC_QUEUE,
+        process.env.BOOKING_RPC_QUEUE,
+        process.env.NOTIFICATION_RPC_QUEUE || 'notification_rpc_queue',
+        process.env.PAYMENT_RPC_QUEUE || 'payment_rpc_queue',
+    ];
+    for (const queue of queues) {
         await assertRpcQueue(channel, queue);
     }
 

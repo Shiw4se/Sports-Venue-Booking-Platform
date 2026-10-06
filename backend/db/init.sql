@@ -43,14 +43,12 @@ CREATE TABLE IF NOT EXISTS public.bookings (
     slot_id uuid NOT NULL,
     start_time timestamptz NOT NULL,
     end_time timestamptz NOT NULL,
-    status varchar DEFAULT 'booked' CHECK (status IN ('booked', 'cancelled')),
+    status varchar DEFAULT 'booked' CHECK (status IN ('pending_payment', 'booked', 'cancelled')),
     created_at timestamp DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id)
 );
 
--- Extra protection against double booking: one active booking per slot
-CREATE UNIQUE INDEX IF NOT EXISTS bookings_active_slot_uniq
-    ON public.bookings (slot_id) WHERE status = 'booked';
+-- Extra protection against double booking: one active booking per slot (see v7 index below)
 
 -- v2: pricing. ADD COLUMN IF NOT EXISTS keeps the script idempotent,
 -- so it can be re-applied to upgrade an existing database.
@@ -153,3 +151,59 @@ CREATE TABLE IF NOT EXISTS public.emails (
     PRIMARY KEY (id)
 );
 CREATE INDEX IF NOT EXISTS emails_created_idx ON public.emails (created_at DESC);
+
+-- v7: online payments (Stripe)
+-- Booking status: pending_payment (slot held while the player pays) -> booked | cancelled.
+-- The CHECK constraint was created inline (auto-named); replace it only when it lacks the new status.
+DO $$
+DECLARE
+    con text;
+BEGIN
+    SELECT conname INTO con FROM pg_constraint
+    WHERE conrelid = 'public.bookings'::regclass AND contype = 'c'
+      AND pg_get_constraintdef(oid) LIKE '%status%' AND pg_get_constraintdef(oid) NOT LIKE '%pending_payment%';
+    IF con IS NOT NULL THEN
+        EXECUTE format('ALTER TABLE public.bookings DROP CONSTRAINT %I', con);
+        ALTER TABLE public.bookings ADD CONSTRAINT bookings_status_check
+            CHECK (status IN ('pending_payment', 'booked', 'cancelled'));
+    END IF;
+END $$;
+
+ALTER TABLE public.bookings ADD COLUMN IF NOT EXISTS hold_expires_at timestamptz;  -- pending_payment only
+ALTER TABLE public.bookings ADD COLUMN IF NOT EXISTS paid_at timestamptz;
+ALTER TABLE public.bookings ADD COLUMN IF NOT EXISTS refunded_at timestamptz;
+ALTER TABLE public.bookings ADD COLUMN IF NOT EXISTS cancel_reason varchar(30)
+    CHECK (cancel_reason IN ('user', 'payment_expired', 'payment_failed', 'late_payment'));
+
+-- A pending booking holds its slot too, so the partial unique index covers both statuses
+DROP INDEX IF EXISTS bookings_active_slot_uniq;
+CREATE UNIQUE INDEX IF NOT EXISTS bookings_active_slot_uniq_v7
+    ON public.bookings (slot_id) WHERE status IN ('booked', 'pending_payment');
+CREATE INDEX IF NOT EXISTS bookings_pending_hold_idx
+    ON public.bookings (hold_expires_at) WHERE status = 'pending_payment';
+
+-- One payment record per booking; stripe_session_id is the latest Checkout Session
+CREATE TABLE IF NOT EXISTS public.payments (
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    booking_id uuid NOT NULL UNIQUE REFERENCES public.bookings(id) ON DELETE CASCADE,
+    user_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+    amount numeric(10, 2) NOT NULL,
+    currency varchar(3) NOT NULL DEFAULT 'usd',
+    stripe_session_id varchar UNIQUE,
+    stripe_payment_intent_id varchar,
+    status varchar(20) NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending', 'paid', 'expired', 'failed', 'refunded', 'refund_failed')),
+    refund_id varchar,
+    created_at timestamptz DEFAULT now(),
+    updated_at timestamptz DEFAULT now(),
+    PRIMARY KEY (id)
+);
+CREATE INDEX IF NOT EXISTS payments_payment_intent_idx ON public.payments (stripe_payment_intent_id);
+
+-- Processed Stripe webhook events (idempotency)
+CREATE TABLE IF NOT EXISTS public.stripe_events (
+    event_id varchar NOT NULL,
+    type varchar(60) NOT NULL,
+    received_at timestamptz DEFAULT now(),
+    PRIMARY KEY (event_id)
+);

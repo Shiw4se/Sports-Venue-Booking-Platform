@@ -315,3 +315,10 @@
     overflow: hidden;
     text-overflow: ellipsis;
 }
+
+.bookingHold {
+    margin-top: 4px;
+    color: var(--warning);
+    font-size: 13px;
+    font-weight: 600;
+}

@@ -1,6 +1,8 @@
 const { DataTypes } = require('sequelize');
 
-const BOOKING_STATUSES = ['booked', 'cancelled'];
+// pending_payment: slot is held while the player pays (Stripe Checkout); expires after PAYMENT_HOLD_MINUTES
+const BOOKING_STATUSES = ['pending_payment', 'booked', 'cancelled'];
+const CANCEL_REASONS = ['user', 'payment_expired', 'payment_failed', 'late_payment'];
 
 module.exports = (sequelize) => {
     return sequelize.define('Booking', {
@@ -43,6 +45,15 @@ module.exports = (sequelize) => {
         reminder_sent_at: {
             type: DataTypes.DATE,
             allowNull: true,
+        },
+        // Payment lifecycle
+        hold_expires_at: { type: DataTypes.DATE, allowNull: true },
+        paid_at: { type: DataTypes.DATE, allowNull: true },
+        refunded_at: { type: DataTypes.DATE, allowNull: true },
+        cancel_reason: {
+            type: DataTypes.STRING(30),
+            allowNull: true,
+            validate: { isIn: [CANCEL_REASONS] },
         },
         created_at: {
             type: DataTypes.DATE,
