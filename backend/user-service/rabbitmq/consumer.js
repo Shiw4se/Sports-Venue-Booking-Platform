@@ -1,39 +1,32 @@
-﻿require('dotenv').config();
+require('dotenv').config();
 const amqp = require('amqplib');
-const { register, login, ValidateUser } = require('../controllers/user.controller');
-
+const { connectWithRetry } = require('../../shared/amqp');
+const { serveRpc } = require('../../shared/rpc');
+const { createEventPublisher } = require('../../shared/events');
+const controller = require('../controllers/user.controller');
 
 async function start() {
-    const connection = await amqp.connect(process.env.RABBITMQ_URL);
+    const connection = await connectWithRetry(amqp, process.env.RABBITMQ_URL);
+
+    const eventsChannel = await connection.createChannel();
+    controller.setEventPublisher(await createEventPublisher(eventsChannel));
+
     const channel = await connection.createChannel();
-
-    await channel.assertQueue(process.env.RPC_QUEUE, { durable: false });
-    console.log(`[x] Waiting for RPC requests on ${process.env.RPC_QUEUE}`);
-
-    channel.consume(process.env.RPC_QUEUE, async (msg) => {
-
-        channel.ack(msg);
-        const { action, data } = JSON.parse(msg.content.toString());
-
-        let response;
-        if (action === 'register') {
-            response = await register(data);
-        } else if (action === 'login') {
-            response = await login(data);
-        }else if (action === 'validate_user') {
-            response = await ValidateUser(data);
-        }
-        else {
-            response = { status: 400, body: { message: 'Unknown action' } };
-        }
-
-        channel.sendToQueue(
-            msg.properties.replyTo,
-            Buffer.from(JSON.stringify(response)),
-            { correlationId: msg.properties.correlationId }
-        );
-
-
+    await serveRpc(channel, process.env.RPC_QUEUE, {
+        register: controller.register,
+        login: controller.login,
+        validate_user: controller.validateUser,
+        update_profile: controller.updateProfile,
+        change_password: controller.changePassword,
+        set_avatar: controller.setAvatar,
+        remove_avatar: controller.removeAvatar,
+        get_avatar: controller.getAvatar,
+        forgot_password: controller.forgotPassword,
+        reset_password: controller.resetPassword,
+        list_favorites: controller.listFavorites,
+        add_favorite: controller.addFavorite,
+        remove_favorite: controller.removeFavorite,
+        get_public_users: controller.getPublicUsers,
     });
 }
 

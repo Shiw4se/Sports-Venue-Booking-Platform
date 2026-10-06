@@ -1,0 +1,587 @@
+/* ---------- Shared card ---------- */
+
+.card {
+    padding: 20px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    box-shadow: var(--shadow-sm);
+}
+
+.cardHeader {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+}
+
+.cardTitle {
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.muted {
+    color: var(--text-muted);
+    font-size: 14px;
+}
+
+.eyebrow,
+.eyebrowLight {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.eyebrow {
+    color: var(--text-muted);
+}
+
+.eyebrowLight {
+    color: rgba(255, 255, 255, 0.85);
+}
+
+/* ---------- Next game ---------- */
+
+.nextGame {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    overflow: hidden;
+    padding: 22px 24px;
+    border-radius: var(--radius-lg);
+    background: linear-gradient(135deg, var(--primary), #0ea5e9);
+    color: #fff;
+    box-shadow: var(--shadow);
+}
+
+/* soft court circle in the corner */
+.nextGame::after {
+    content: '';
+    position: absolute;
+    right: -60px;
+    bottom: -60px;
+    width: 220px;
+    height: 220px;
+    border: 2px solid rgba(255, 255, 255, 0.18);
+    border-radius: 50%;
+    pointer-events: none;
+}
+
+.football_field {
+    background: linear-gradient(135deg, #15803d, #22c55e);
+}
+
+.tennis_court {
+    background: linear-gradient(135deg, #1d4ed8, #3b82f6);
+}
+
+.basketball_court {
+    background: linear-gradient(135deg, #c2410c, #f97316);
+}
+
+.nextTop {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.countdown {
+    padding: 4px 12px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.2);
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.nextMain {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.nextIcon {
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    width: 64px;
+    height: 64px;
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.18);
+    font-size: 34px;
+}
+
+.nextVenue {
+    font-size: 24px;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    line-height: 1.2;
+}
+
+.nextWhen {
+    margin-top: 4px;
+    font-size: 16px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.nextMeta {
+    margin-top: 2px;
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 14px;
+}
+
+.nextActions {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.glassButton {
+    display: inline-flex;
+    align-items: center;
+    height: 36px;
+    padding: 0 14px;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    border-radius: var(--radius-sm);
+    background: rgba(255, 255, 255, 0.14);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background-color 0.15s;
+}
+
+.glassButton:hover {
+    background: rgba(255, 255, 255, 0.26);
+}
+
+.glassButton:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: 2px;
+}
+
+.nextEmpty {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 8px;
+}
+
+.nextEmpty button {
+    margin-top: 8px;
+}
+
+.nextEmptyTitle {
+    font-size: 20px;
+    font-weight: 700;
+}
+
+/* ---------- Activity heatmap ---------- */
+
+.heatmap {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+}
+
+.heatDays {
+    display: grid;
+    grid-template-rows: repeat(7, 14px);
+    row-gap: 3px;
+    padding-top: 20px;
+    color: var(--text-subtle);
+    font-size: 10px;
+    line-height: 14px;
+}
+
+.heatBody {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.heatMonths {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 14px;
+    column-gap: 3px;
+    height: 14px;
+    color: var(--text-subtle);
+    font-size: 10px;
+    white-space: nowrap;
+}
+
+.heatGrid {
+    display: flex;
+    gap: 3px;
+}
+
+.heatColumn {
+    display: grid;
+    grid-template-rows: repeat(7, 14px);
+    row-gap: 3px;
+}
+
+.heatCell {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+}
+
+.heatCell:focus-visible {
+    outline: 2px solid var(--text);
+    outline-offset: 1px;
+}
+
+.heat0 {
+    background: var(--surface-muted);
+    box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.heat1 {
+    background: var(--heat-1);
+}
+
+.heat2 {
+    background: var(--heat-2);
+}
+
+.heat3 {
+    background: var(--heat-3);
+}
+
+.heatFuture {
+    background: transparent;
+    box-shadow: inset 0 0 0 1px var(--border);
+    opacity: 0.4;
+}
+
+.heatStats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin: 16px 0 0;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+}
+
+.heatStats dt {
+    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.heatStats dd {
+    margin: 2px 0 0;
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.heatFooter {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+    font-size: 13px;
+}
+
+.heatCaption {
+    color: var(--text-muted);
+}
+
+.heatCaption strong {
+    color: var(--text);
+}
+
+.heatLegend {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    color: var(--text-subtle);
+    font-size: 12px;
+}
+
+.heatLegend .heatCell {
+    width: 12px;
+    height: 12px;
+}
+
+/* ---------- Achievements ---------- */
+
+.achievements {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 10px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.achievement {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+}
+
+.unlocked {
+    border-color: color-mix(in srgb, var(--primary) 40%, var(--border));
+    background: color-mix(in srgb, var(--primary-soft) 45%, var(--surface));
+}
+
+.locked .achievementIcon {
+    filter: grayscale(1);
+    opacity: 0.45;
+}
+
+.achievementIcon {
+    margin-bottom: 4px;
+    font-size: 26px;
+    line-height: 1.2;
+}
+
+.achievementTitle {
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.achievementDesc {
+    flex: 1;
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.achievementDone {
+    margin-top: 8px;
+    color: var(--success);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.progress {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.progressTrack {
+    flex: 1;
+    height: 6px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--surface-muted);
+    box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.progressFill {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+    background: var(--chart);
+}
+
+.progressText {
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Edit profile ---------- */
+
+.editForm {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.editPreview {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 12px;
+    border-radius: var(--radius);
+    background: var(--surface-muted);
+}
+
+.photoControls {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.photoButtons {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.editName {
+    font-weight: 700;
+}
+
+.colorField,
+.passwordField {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    border: none;
+}
+
+.colorField legend,
+.passwordField legend {
+    margin-bottom: 8px;
+    padding: 0;
+}
+
+.optional {
+    font-weight: 400;
+    color: var(--text-subtle);
+}
+
+.swatches {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.swatch {
+    position: relative;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 0 0 2px var(--surface), 0 0 0 3px transparent;
+    transition: box-shadow 0.15s;
+}
+
+.swatch input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.swatch:has(input:focus-visible) {
+    outline: 2px solid var(--text);
+    outline-offset: 3px;
+}
+
+.swatchDefault {
+    background: linear-gradient(135deg, var(--primary), #22c55e);
+}
+
+.swatchSelected {
+    box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--text);
+}
+
+.formError {
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    background: var(--danger-soft);
+    color: var(--danger);
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.formActions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+/* ---------- Saved venues ---------- */
+
+.savedEmpty {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.savedList {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 10px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.savedItem {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px 8px 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+}
+
+.savedOpen {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+    padding: 0;
+    border: none;
+    background: none;
+    text-align: left;
+    cursor: pointer;
+}
+
+.savedOpen:hover strong {
+    color: var(--primary);
+}
+
+.savedThumb {
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    width: 56px;
+    height: 56px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, var(--primary), #0ea5e9);
+    background-size: cover;
+    background-position: center;
+    font-size: 26px;
+}
+
+.savedText {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.savedText strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.savedMeta {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--text-muted);
+    font-size: 13px;
+}

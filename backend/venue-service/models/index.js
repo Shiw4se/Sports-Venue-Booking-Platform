@@ -1,4 +1,4 @@
-﻿const { Sequelize } = require('sequelize');
+const { Sequelize } = require('sequelize');
 require('dotenv').config();
 
 const sequelize = new Sequelize(process.env.DATABASE_URL, {
@@ -6,15 +6,17 @@ const sequelize = new Sequelize(process.env.DATABASE_URL, {
     logging: false
 });
 
-// Імпортуємо фабрики моделей
+// Model factories
 const VenueModel = require('./venue.model');
 const SlotModel = require('./slot.model');
+const VenuePhotoModel = require('./venuePhoto.model');
 
-// Ініціалізуємо моделі
+// Initialize models
 const Venue = VenueModel(sequelize);
 const Slot = SlotModel(sequelize);
+const VenuePhoto = VenuePhotoModel(sequelize);
 
-// Встановлюємо зв’язки
+// Associations
 Venue.hasMany(Slot, {
     foreignKey: 'venue_id',
     as: 'slots',
@@ -25,9 +27,15 @@ Slot.belongsTo(Venue, {
     as: 'venue',
     onDelete: 'CASCADE'
 });
+Venue.hasMany(VenuePhoto, {
+    foreignKey: 'venue_id',
+    as: 'photos',
+    onDelete: 'CASCADE'
+});
 
 module.exports = {
     sequelize,
     Venue,
-    Slot
+    Slot,
+    VenuePhoto
 };

@@ -1,55 +1,317 @@
-﻿.container {
-    max-width: 600px;
-    margin: 30px auto;
-    padding: 20px;
-    background-color: #f9fafb;
-    border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    color: #333;
+.page {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
 }
 
-h2, h3 {
-    color: #2c3e50;
-    margin-bottom: 15px;
+/* ---------- Identity + next game ---------- */
+
+.topRow {
+    display: grid;
+    grid-template-columns: minmax(260px, 1fr) 1.6fr;
+    gap: 20px;
 }
 
-p {
-    font-size: 16px;
-    line-height: 1.5;
-    margin: 8px 0;
+.profileCard {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 24px 20px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    box-shadow: var(--shadow-sm);
+    text-align: center;
 }
 
-ul {
-    list-style: none;
-    padding-left: 0;
+.identity {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
 }
 
-li {
-    background-color: white;
-    border: 1px solid #ddd;
-    border-radius: 6px;
-    padding: 15px 20px;
-    margin-bottom: 12px;
-    transition: box-shadow 0.2s ease;
+.name {
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: -0.01em;
 }
 
-li:hover {
-    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+.email {
+    color: var(--text-muted);
+    font-size: 14px;
+    word-break: break-all;
 }
 
-button {
-    margin-top: 10px;
-    background-color: #e74c3c;
-    border: none;
-    color: white;
-    padding: 8px 14px;
-    border-radius: 4px;
-    cursor: pointer;
+.memberSince {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 4px;
+    color: var(--text-subtle);
+    font-size: 13px;
+}
+
+/* ---------- Stats ---------- */
+
+.statsRow {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+}
+
+.statTile {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 16px 18px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    box-shadow: var(--shadow-sm);
+}
+
+.statLabel {
+    color: var(--text-muted);
+    font-size: 13px;
     font-weight: 600;
-    transition: background-color 0.2s ease;
 }
 
-button:hover {
-    background-color: #c0392b;
+.statValue {
+    font-size: 24px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    line-height: 1.25;
+}
+
+.statHint {
+    overflow: hidden;
+    color: var(--text-subtle);
+    font-size: 13px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* ---------- Heatmap + achievements ---------- */
+
+.widgetsRow {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: stretch;
+    gap: 20px;
+}
+
+/* ---------- Bookings list ---------- */
+
+.bookingsPanel {
+    padding: 20px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    box-shadow: var(--shadow-sm);
+}
+
+.panelHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+}
+
+.panelTitle {
+    font-size: 20px;
+    font-weight: 700;
+}
+
+.tabs {
+    display: flex;
+    gap: 4px;
+    padding: 4px;
+    border-radius: var(--radius-sm);
+    background: var(--surface-muted);
+}
+
+.tab {
+    height: 32px;
+    padding: 0 12px;
+    border: none;
+    border-radius: 6px;
+    background: none;
+    color: var(--text-muted);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.tabActive {
+    background: var(--surface);
+    color: var(--text);
+    box-shadow: var(--shadow-sm);
+}
+
+.bookings {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.booking {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 14px 16px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    transition: border-color 0.15s;
+}
+
+.booking:hover {
+    border-color: var(--border-strong);
+}
+
+.bookingCancelled {
+    opacity: 0.6;
+}
+
+.dateBlock {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 52px;
+    height: 56px;
+    border-radius: var(--radius-sm);
+    background: var(--primary-soft);
+    color: var(--primary);
+    line-height: 1.1;
+}
+
+.dateDay {
+    font-size: 20px;
+    font-weight: 800;
+}
+
+.dateMonth {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.bookingInfo {
+    flex: 1;
+    min-width: 0;
+}
+
+.bookingVenue {
+    font-weight: 600;
+}
+
+.bookingTime {
+    margin-top: 2px;
+    color: var(--text-muted);
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+}
+
+.bookingPrice {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.bookingSide {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* ---------- Empty / loading / confirm ---------- */
+
+.empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 40px 16px;
+    text-align: center;
+}
+
+.emptyIcon {
+    font-size: 36px;
+}
+
+.emptyText {
+    color: var(--text-muted);
+}
+
+.skeleton {
+    border-radius: var(--radius-lg);
+    background: linear-gradient(90deg, var(--surface-muted) 0, var(--border) 50%, var(--surface-muted) 100%);
+    background-size: 800px 100%;
+    animation: shimmer 1.4s linear infinite;
+}
+
+.confirmText {
+    margin-bottom: 16px;
+    color: var(--text-muted);
+}
+
+.confirmActions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+@media (max-width: 820px) {
+    .topRow,
+    .widgetsRow {
+        grid-template-columns: 1fr;
+    }
+
+    .statsRow {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .booking {
+        flex-wrap: wrap;
+    }
+
+    .bookingSide {
+        width: 100%;
+        justify-content: space-between;
+        padding-left: 68px;
+    }
+}
+
+.nowrap {
+    white-space: nowrap;
+}
+
+.showMore {
+    width: 100%;
+    margin-top: 12px;
+}
+
+.bookingReview {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 4px;
+    overflow: hidden;
+    color: var(--text-muted);
+    font-size: 13px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.bookingReview span {
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
